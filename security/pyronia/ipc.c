@@ -71,7 +71,7 @@ int pyr_may_ptrace(struct pyr_profile *tracer, struct pyr_profile *tracee,
 	if (unconfined(tracer) || tracer == tracee)
 		return 0;
 	/* log this capability request */
-	return pyr_proc_capable(tracer, CAP_SYS_PTRACE, 1);
+	return pyr_capable(tracer, CAP_SYS_PTRACE, 1);
 }
 
 /**

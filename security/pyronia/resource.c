@@ -105,7 +105,7 @@ int pyr_task_setrlimit(struct pyr_profile *profile, struct task_struct *task,
 	 * task has CAP_SYS_RESOURCE.
 	 */
 	if ((profile != task_profile &&
-	     pyr_proc_capable(profile, CAP_SYS_RESOURCE, 1)) ||
+	     pyr_capable(profile, CAP_SYS_RESOURCE, 1)) ||
 	    (profile->rlimits.mask & (1 << resource) &&
 	     new_rlim->rlim_max > profile->rlimits.limits[resource].rlim_max))
 		error = -EACCES;

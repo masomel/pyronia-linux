@@ -22,14 +22,14 @@
 
 struct pyr_profile;
 
-/* pyr_proc_caps - confinement data for capabilities
+/* pyr_caps - confinement data for capabilities
  * @allowed: capabilities mask
  * @audit: caps that are to be audited
  * @quiet: caps that should not be audited
  * @kill: caps that when requested will result in the task being killed
  * @extended: caps that are subject finer grained mediation
  */
-struct pyr_proc_caps {
+struct pyr_caps {
 	kernel_cap_t allow;
 	kernel_cap_t audit;
 	kernel_cap_t quiet;
@@ -37,26 +37,11 @@ struct pyr_proc_caps {
 	kernel_cap_t extended;
 };
 
-/* pyr_lib_caps - defines the possible capabilities a library can
- * have in Pyronia
- */
-enum pyr_lib_caps {
-  CAM_CAP, // read-only access to the camera
-  MIC_CAP, // read-only access to the microphone
-  SENSOR_CAP, // read-only access to a specified sensor
-  CRED_CAP, // read-only access to specified credentials
-  FILE_R_CAP, // read access from a specified file
-  FILE_W_CAP, // write access to a specified file
-  NET_R_CAP, // read access from a specified net addr
-  NET_W_CAP, // write access of a specified data type to a specified net addr
-  EXEC_CAP, //exec access of a specified binary
-};
-
 extern struct pyr_fs_entry pyr_fs_entry_caps[];
 
-int pyr_proc_capable(struct pyr_profile *profile, int cap, int audit);
+int pyr_capable(struct pyr_profile *profile, int cap, int audit);
 
-static inline void pyr_free_cap_rules(struct pyr_proc_caps *caps)
+static inline void pyr_free_cap_rules(struct pyr_caps *caps)
 {
 	/* NOP */
 }

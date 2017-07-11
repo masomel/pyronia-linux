@@ -303,6 +303,9 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 	}
 	error = pyr_audit_file(profile, &perms, GFP_KERNEL, op, request, name,
 			      NULL, cond->uid, info, error);
+
+        // TODO: insert library-level check here
+
 	kfree(buffer);
 
 	return error;

@@ -138,7 +138,7 @@ static int pyronia_capable(const struct cred *cred, struct user_namespace *ns,
 
 	profile = pyr_cred_profile(cred);
 	if (!unconfined(profile))
-		error = pyr_proc_capable(profile, cap, audit);
+		error = pyr_capable(profile, cap, audit);
 	return error;
 }
 

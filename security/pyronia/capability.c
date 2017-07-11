@@ -120,7 +120,7 @@ static int profile_capable(struct pyr_profile *profile, int cap)
 }
 
 /**
- * pyr_proc_capable - test permission to use capability
+ * pyr_capable - test permission to use capability
  * @profile: profile being tested against (NOT NULL)
  * @cap: capability to be tested
  * @audit: whether an audit record should be generated
@@ -129,7 +129,7 @@ static int profile_capable(struct pyr_profile *profile, int cap)
  *
  * Returns: 0 on success, or else an error code.
  */
-int pyr_proc_capable(struct pyr_profile *profile, int cap, int audit)
+int pyr_capable(struct pyr_profile *profile, int cap, int audit)
 {
 	int error = profile_capable(profile, cap);
 
