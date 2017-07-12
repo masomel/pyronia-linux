@@ -43,23 +43,56 @@ enum pyr_lib_perms {
 
 struct path;
 
+// indicates whether a library ACL entry
+// is for a local resource
+// or a remote network destination
+enum acl_entry_type {
+    resource_entry,
+    net_entry,
+};
+
 // this is an individual entry in the ACL for
 // a library
 struct pyr_acl_entry {
-    u32 perm;
-    // the entry is either for a local resource
-    // or a remote network destination
+
+    enum acl_entry_type entry_type;
+
     union {
-        struct path *resource;
-        const char* net_dest;
-    };
+        const char *resource;
+        const char *net_dest;
+    } name;
+
+    u32 perms;
     enum pyr_data_types data_type;
-    struct pyr_acl_entry next;
+    struct pyr_acl_entry *next;
 };
 
-struct pyr_perm_db_entry {
-  const char* lib;
-  struct pyr_acl_entry acl;
+/* An individual library policy for an application.
+ * lib: the library this policy belongs too
+ * acl: the ACL containing the library's permissions
+ * next: the next entry in the library policy database
+ */
+struct pyr_lib_policy {
+    const char* lib;
+    struct pyr_acl_entry *acl;
+    struct pyr_lib_policy *next;
 };
+
+/* An application's Pyronia library policy database.
+ * policy_db_head: The first entry in the policy database
+ *      linked list
+ */
+struct pyr_lib_policy_db {
+    struct pyr_lib_policy *perm_db_head;
+    // TODO: What other metadata do we need here?
+};
+
+int pyr_add_acl_entry(struct pyr_acl_entry **, enum acl_entry_type, const char *, u32,
+                      enum pyr_data_types);
+int pyr_add_lib_policy(struct pyr_lib_policy_db **, const char *, struct pyr_acl_entry *);
+int pyr_new_lib_policy_db(struct pyr_lib_policy_db **);
+struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *, const char *);
+struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *, const char *);
+void pyr_free_lib_policy_db(struct pyr_lib_policy_db **);
 
 #endif /* __PYR_LIBPOLICY_H */
