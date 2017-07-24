@@ -223,7 +223,7 @@ struct pyr_profile {
 	struct pyr_caps caps;
 	struct pyr_net net;
 	struct pyr_rlimit rlimits;
-    struct pyr_perm_db lib_perms;
+    struct pyr_lib_policy_db lib_perms;
 
 	unsigned char *hash;
 	char *dirname;

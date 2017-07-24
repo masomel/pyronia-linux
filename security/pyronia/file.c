@@ -18,6 +18,8 @@
 #include "include/match.h"
 #include "include/path.h"
 #include "include/policy.h"
+#include "include/stack_inspector.h"
+#include "include/callgraph.h"
 
 struct file_perms pyr_nullperms;
 
@@ -140,7 +142,8 @@ int pyr_audit_file(struct pyr_profile *profile, struct file_perms *perms,
 		if (sa.pyrd->fs.request & perms->kill)
 			type = AUDIT_PYRONIA_KILL;
 
-		/* quiet known rejects, assumes quiet and kill do not overlap */
+		/* quiet known rejects, assumes quiet and kill do not
+                   overlap */
 		if ((sa.pyrd->fs.request & perms->quiet) &&
 		    AUDIT_MODE(profile) != AUDIT_NOQUIET &&
 		    AUDIT_MODE(profile) != AUDIT_ALL)
@@ -281,6 +284,8 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 {
 	char *buffer = NULL;
 	struct file_perms perms = {};
+        pyr_cg_node_t *callgraph = {};
+        u32 lib_perms;
 	const char *name, *info = NULL;
 	int error;
 
@@ -304,7 +309,24 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 	error = pyr_audit_file(profile, &perms, GFP_KERNEL, op, request, name,
 			      NULL, cond->uid, info, error);
 
-        // TODO: insert library-level check here
+        // Pyronia hook: check the call stack to determine
+        // if the requesting library has permissions to
+        // complete this operation
+        if (!error) {
+            // FIXME: msm - support multi-threaded stack tracing
+            request_callstack(&callgraph);
+
+            if (pyr_lib_cg_perms(profile->lib_perms, callgraph,
+                                 name, &lib_perms)) {
+                error = -EACCESS;
+            }
+
+            if (request & ~lib_perms) {
+                error = -EACCESS;
+            }
+
+            pyr_free_callgraph(&callgraph);
+        }
 
 	kfree(buffer);
 

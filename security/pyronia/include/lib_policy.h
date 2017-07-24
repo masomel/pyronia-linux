@@ -87,12 +87,15 @@ struct pyr_lib_policy_db {
     // TODO: What other metadata do we need here?
 };
 
-int pyr_add_acl_entry(struct pyr_acl_entry **, enum acl_entry_type, const char *, u32,
-                      enum pyr_data_types);
-int pyr_add_lib_policy(struct pyr_lib_policy_db **, const char *, struct pyr_acl_entry *);
+int pyr_add_acl_entry(struct pyr_acl_entry **, enum acl_entry_type,
+                      const char *, u32, enum pyr_data_types);
+int pyr_add_lib_policy(struct pyr_lib_policy_db **, const char *,
+                       struct pyr_acl_entry *);
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **);
-struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *, const char *);
-struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *, const char *);
+struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *,
+                                              const char *);
+struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *,
+                                            const char *);
 void pyr_free_lib_policy_db(struct pyr_lib_policy_db **);
 
 #endif /* __PYR_LIBPOLICY_H */

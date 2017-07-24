@@ -11,6 +11,8 @@
  * License.
  */
 
+#include <linux/audit.h>
+
 #include "include/pyronia.h"
 #include "include/callgraph.h"
 
@@ -31,6 +33,77 @@ int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib, enum pyr_data_type
  fail:
     kvfree(n);
     return -1;
+}
+
+// Gets the permissions for the given resource from the library's policy
+static u32 get_perms_for_name(struct pyr_lib_policy * policy,
+                              const char *name) {
+
+    struct pyr_acl_entry *acl = pyr_find_lib_acl_entry(policy, name);
+
+    // we don't have an entry in our ACL for this `name`,
+    // so the library doesn't have any permissions to access `name`.
+    // default-deny policy
+    if (acl == NULL) {
+        return 0;
+    }
+
+    return acl->perms;
+}
+
+// Traverse the given callgraph computing each module's permissions
+// at each frame, and return the effective permission
+int pyr_lib_cg_perms(struct pyr_lib_policy_db *lib_policy_db,
+                     pyr_cg_node_t * callgraph, const char *name,
+                     u32 *perms) {
+
+    pyr_cg_node_t *cur_node = callgraph;
+    int err = 0;
+    u32 eff_perm = 0;
+    struct pyr_lib_policy *cur_policy;
+
+    // want effective permission to start as root library in callgraph
+    cur_policy = pyr_find_lib_policy(lib_policy_db, cur_node->lib);
+
+    // something seriously went wrong if we don't have the root lib
+    // in our policy DB
+    if (cur_policy == NULL) {
+        // TODO: throw some big error here
+        err = -1;
+        goto out;
+    }
+
+    eff_perm = get_perms_for_name(cur_policy, name);
+
+    // bail early since the root already doesn't have permission
+    // to access name
+    if (eff_perm == 0) {
+        goto out;
+    }
+
+    cur_node = callgraph->child;
+    while (cur_node != NULL) {
+        cur_policy = pyr_find_lib_policy(lib_policy_db, cur_node->lib);
+
+        // if we don't have an explicit policy for this library,
+        // inherit the current effective permissions, otherwise adjust
+        if (cur_policy != NULL) {
+            // take the intersection of the permissions
+            eff_perm &= get_perms_for_name(cur_policy, name);
+
+            // bail early since the callgraph so far already doesn't have
+            // access to `name`
+            if (eff_perm == 0) {
+                goto out;
+            }
+        }
+
+        cur_node = cur_node->child;
+    }
+
+ out:
+    *perms = eff_perm;
+    return err;
 }
 
 // Recursively free the callgraph nodes

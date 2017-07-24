@@ -18,9 +18,12 @@
 // This function can also be used to initialize `acl`.
 // The new entry will be pointed to by `acl` when this function returns.
 // Returns 0 on success, -1 on failure
-int pyr_add_acl_entry(struct pyr_acl_entry **acl, enum acl_entry_type entry_type,
-                         const char *name, u32 perms, enum pyr_data_types data_type) {
-    struct pyr_acl_entry *new_entry = (struct pyr_acl_entry *)kvzalloc(sizeof(struct pyr_acl_entry));
+int pyr_add_acl_entry(struct pyr_acl_entry **acl,
+                      enum acl_entry_type entry_type,
+                      const char *name, u32 perms,
+                      enum pyr_data_types data_type) {
+    struct pyr_acl_entry *new_entry =
+        (struct pyr_acl_entry *)kvzalloc(sizeof(struct pyr_acl_entry));
 
     if (new_entry == NULL) {
         goto fail;
@@ -50,14 +53,17 @@ int pyr_add_acl_entry(struct pyr_acl_entry **acl, enum acl_entry_type entry_type
     return -1;
 }
 
-// Allocates a new library policy and adds it to the policy DB pointed to by `policy_db`.
-// This function can be used to initialize `policy_db`, but it *cannot* be used
-// to allocate `policy_db`.
-// The new policy will be pointed to by `policy_db->perm_db_head` when this function returns.
+// Allocates a new library policy and adds it to the policy DB pointed to
+// by `policy_db`.
+// This function can be used to initialize `policy_db`, but it *cannot* be
+// used to allocate `policy_db`.
+// The new policy will be pointed to by `policy_db->perm_db_head` when
+// this function returns.
 // Returns 0 on success, -1 on failure
 int pyr_add_lib_policy(struct pyr_lib_policy_db **policy_db, const char *lib,
                       struct pyr_acl_entry *acl) {
-    struct pyr_lib_policy *new_policy = (struct pyr_lib_policy *)kvzalloc(sizeof(struct pyr_lib_policy));
+    struct pyr_lib_policy *new_policy =
+        (struct pyr_lib_policy *)kvzalloc(sizeof(struct pyr_lib_policy));
 
     if (new_policy == NULL) {
         goto fail;
@@ -80,7 +86,8 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db **policy_db, const char *lib,
 // Allocates a new policy DB
 // Returns 0 on success, -1 on failure
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
-    struct pyr_lib_policy_db *db = (struct pyr_lib_policy_db *)kvzalloc(sizeof(struct pyr_lib_policy_db));
+    struct pyr_lib_policy_db *db =
+        (struct pyr_lib_policy_db *)kvzalloc(sizeof(struct pyr_lib_policy_db));
 
     if (db == NULL) {
         goto fail;
@@ -95,7 +102,8 @@ int pyr_new_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
 
 // Finds the ACL entry for `name` in the lib policy given by `policy`.
 // Returns null if no entry for `name` exists.
-struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *policy, const char *name) {
+struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *policy,
+                                              const char *name) {
 
     // traverse the ACL entry linked list, start at the head
     struct pyr_acl_entry *runner = policy->acl;
@@ -122,7 +130,8 @@ struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *policy, con
         runner = runner->next;
     }
 
-    // if we get here, we don't have an ACL entry for this name (resource or net destination)
+    // if we get here, we don't have an ACL entry for this name
+    // (resource or net destination)
     return NULL;
 }
 
