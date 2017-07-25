@@ -20,7 +20,7 @@
 // Returns 0 on success, -1 on failure
 int pyr_add_acl_entry(struct pyr_acl_entry **acl,
                       enum acl_entry_type entry_type,
-                      const char *name, u32 perms,
+                      const char *name, uint32_t perms,
                       enum pyr_data_types data_type) {
     struct pyr_acl_entry *new_entry =
         (struct pyr_acl_entry *)kvzalloc(sizeof(struct pyr_acl_entry));

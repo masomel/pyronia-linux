@@ -14,6 +14,9 @@
 #ifndef __PYR_LIBPOLICY_H
 #define __PYR_LIBPOLICY_H
 
+#include <stdint.h>
+#include <stdio.h>
+
 /** pyr_data_types defines the possible expected sensitive
  * data types obtained from sensors or files
  */
@@ -62,7 +65,7 @@ struct pyr_acl_entry {
         const char *net_dest;
     } name;
 
-    u32 perms;
+    uint32_t perms;
     enum pyr_data_types data_type;
     struct pyr_acl_entry *next;
 };
@@ -88,7 +91,7 @@ struct pyr_lib_policy_db {
 };
 
 int pyr_add_acl_entry(struct pyr_acl_entry **, enum acl_entry_type,
-                      const char *, u32, enum pyr_data_types);
+                      const char *, uint32_t, enum pyr_data_types);
 int pyr_add_lib_policy(struct pyr_lib_policy_db **, const char *,
                        struct pyr_acl_entry *);
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **);

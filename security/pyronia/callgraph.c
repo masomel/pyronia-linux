@@ -11,13 +11,13 @@
  * License.
  */
 
-#include <linux/audit.h>
-
-#include "include/pyronia.h"
 #include "include/callgraph.h"
 
 // Allocate a new callgraph node
-int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib, enum pyr_data_types data_type) {
+int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
+                        enum pyr_data_types data_type,
+                        pyr_cg_node_t *child) {
+
     pyr_cg_node_t *n = (pyr_cg_node_t *)kvzalloc(sizeof(pyr_cg_node_t));
 
     if (n == NULL) {
@@ -36,7 +36,7 @@ int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib, enum pyr_data_type
 }
 
 // Gets the permissions for the given resource from the library's policy
-static u32 get_perms_for_name(struct pyr_lib_policy * policy,
+static uint32_t get_perms_for_name(struct pyr_lib_policy * policy,
                               const char *name) {
 
     struct pyr_acl_entry *acl = pyr_find_lib_acl_entry(policy, name);
@@ -55,11 +55,11 @@ static u32 get_perms_for_name(struct pyr_lib_policy * policy,
 // at each frame, and return the effective permission
 int pyr_lib_cg_perms(struct pyr_lib_policy_db *lib_policy_db,
                      pyr_cg_node_t * callgraph, const char *name,
-                     u32 *perms) {
+                     uint32_t *perms) {
 
     pyr_cg_node_t *cur_node = callgraph;
     int err = 0;
-    u32 eff_perm = 0;
+    uint32_t eff_perm = 0;
     struct pyr_lib_policy *cur_policy;
 
     // want effective permission to start as root library in callgraph
