@@ -13,6 +13,8 @@
 
 #include "include/callgraph.h"
 
+#include "include/userland_test.h"
+
 // Allocate a new callgraph node
 int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
                         enum pyr_data_types data_type,
@@ -26,7 +28,7 @@ int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
 
     n->lib = lib;
     n->data_type = data_type;
-    n->child = NULL;
+    n->child = child;
 
     *cg_root = n;
     return 0;

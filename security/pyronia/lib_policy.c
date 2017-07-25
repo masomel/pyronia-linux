@@ -14,6 +14,8 @@
 #include <string.h>
 #include "include/lib_policy.h"
 
+#include "include/userland_test.h"
+
 // Allocates a new ACL entry and adds it to the ACL pointed to by `acl`.
 // This function can also be used to initialize `acl`.
 // The new entry will be pointed to by `acl` when this function returns.
