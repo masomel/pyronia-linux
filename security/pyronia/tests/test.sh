@@ -1,11 +1,11 @@
 #!/bin/bash
 
 OUT=$(./$1)
+RET=$?
 
-if [ $? -ne 0 ]
-then
-    echo "$1 failed: $OUT"
+if [ $RET -ne 0 ]; then
+    echo "$1 failed with return value $RET: $OUT"
     exit
 fi
 
-echo "$1 passed"
+echo "$1 passed with return value $RET"

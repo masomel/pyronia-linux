@@ -62,8 +62,9 @@ int pyr_add_acl_entry(struct pyr_acl_entry **acl,
 // The new policy will be pointed to by `policy_db->perm_db_head` when
 // this function returns.
 // Returns 0 on success, -1 on failure
-int pyr_add_lib_policy(struct pyr_lib_policy_db **policy_db, const char *lib,
-                      struct pyr_acl_entry *acl) {
+int pyr_add_lib_policy(struct pyr_lib_policy_db **policy_db,
+                       const char *lib,
+                       struct pyr_acl_entry *acl) {
     struct pyr_lib_policy *new_policy =
         (struct pyr_lib_policy *)kvzalloc(sizeof(struct pyr_lib_policy));
 
@@ -96,7 +97,9 @@ int pyr_new_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
     }
 
     db->perm_db_head = NULL;
+    *policy_db = db;
 
+    return 0;
  fail:
     kvfree(db);
     return -1;

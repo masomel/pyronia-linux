@@ -3,7 +3,7 @@ LDIR=..
 CC=gcc
 CFLAGS=-iquote$(IDIR)
 
-TESTS = callgraph_creation_test
+TESTS = lib_policy_creation_test callgraph_creation_test
 all: $(TESTS)
 
 _DEPS = userland_test.h lib_policy.h callgraph.h
@@ -13,6 +13,7 @@ _LIB = lib_policy.o callgraph.o
 LIB = $(patsubst %,$(LDIR)/%,$(_LIB))
 
 callgraph_creation_test: $(LIB) callgraph_creation.c ; $(CC) $^ -o $@
+lib_policy_creation_test: $(LIB) lib_policy_creation.c ; $(CC) $^ -o $@
 
 $(LDIR)/%.o: %.c $(DEPS) ; $(CC) -c -o $@ $< $(CFLAGS)
 
