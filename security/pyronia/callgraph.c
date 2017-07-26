@@ -50,12 +50,12 @@ static uint32_t get_perms_for_name(struct pyr_lib_policy * policy,
         return 0;
     }
 
-    return acl->perms;
+    return pyr_get_perms_from_acl(acl);
 }
 
 // Traverse the given callgraph computing each module's permissions
 // at each frame, and return the effective permission
-int pyr_lib_cg_perms(struct pyr_lib_policy_db *lib_policy_db,
+int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
                      pyr_cg_node_t * callgraph, const char *name,
                      uint32_t *perms) {
 

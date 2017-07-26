@@ -180,7 +180,7 @@ struct pyr_replacedby {
  * @caps: capabilities for the profile
  * @net: network controls for the profile
  * @rlimits: rlimits for the profile
- * @lib_perms: the library-specific permissions for the profile
+ * @lib_perm_db: the library-specific permissions for the profile
  *
  * @dents: dentries for the profiles file entries in pyroniafs
  * @dirname: name of the profile dir in pyroniafs
@@ -223,7 +223,7 @@ struct pyr_profile {
 	struct pyr_caps caps;
 	struct pyr_net net;
 	struct pyr_rlimit rlimits;
-    struct pyr_lib_policy_db lib_perms;
+        struct pyr_lib_policy_db lib_perm_db;
 
 	unsigned char *hash;
 	char *dirname;

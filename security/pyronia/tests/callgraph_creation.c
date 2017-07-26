@@ -26,13 +26,13 @@ int main(int argc, char *argv[]) {
     }
 
     pyr_cg_node_t *runner = callgraph;
-    int i = 3;
-    while(runner != NULL || i > 0) {
+    int i = 0;
+    while(runner != NULL || i < 4) {
         if (strncmp(runner->lib, libs[i], strlen(libs[i]))) {
             PYR_ERROR("Expected %s, got %s\n", libs[i], runner->lib);
             return -1;
         }
-        i--;
+        i++;
         runner = runner->child;
     }
 

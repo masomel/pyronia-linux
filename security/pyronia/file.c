@@ -316,11 +316,13 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             // FIXME: msm - support multi-threaded stack tracing
             request_callstack(&callgraph);
 
-            if (pyr_lib_cg_perms(profile->lib_perms, callgraph,
+            if (pyr_compute_lib_perms(profile->lib_perm_db, callgraph,
                                  name, &lib_perms)) {
                 error = -EACCESS;
             }
 
+            // this checks if the requested permissions are an exact match
+            // to the effective library permissions
             if (request & ~lib_perms) {
                 error = -EACCESS;
             }

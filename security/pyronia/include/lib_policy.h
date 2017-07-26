@@ -54,6 +54,23 @@ enum acl_entry_type {
     net_entry,
 };
 
+// contains the permissions
+// for a file system resource-based
+// permissions
+struct resource_entry {
+    const char *name;
+    // this is the OR of various file access permissions
+    // need to match with requested & ~perms to allow
+    uint32_t perms;
+};
+
+struct net_entry {
+    const char *name;
+    // this is the OR of various permitted network operations
+    // need to match with requested_op & ~op to allow
+    uint32_t op;
+};
+
 // this is an individual entry in the ACL for
 // a library
 struct pyr_acl_entry {
@@ -61,11 +78,10 @@ struct pyr_acl_entry {
     enum acl_entry_type entry_type;
 
     union {
-        const char *resource;
-        const char *net_dest;
-    } name;
+        struct resource_entry fs_resource;
+        struct net_entry net_dest;
+    } target;
 
-    uint32_t perms;
     enum pyr_data_types data_type;
     struct pyr_acl_entry *next;
 };
@@ -97,6 +113,7 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db **, const char *,
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **);
 struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *,
                                               const char *);
+uint32_t pyr_get_perms_from_acl(struct pyr_acl_entry *);
 struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *,
                                             const char *);
 void pyr_free_lib_policy_db(struct pyr_lib_policy_db **);

@@ -34,16 +34,17 @@ int pyr_add_acl_entry(struct pyr_acl_entry **acl,
     new_entry->entry_type = entry_type;
     switch(new_entry->entry_type) {
         case(resource_entry):
-            new_entry->name.resource = name;
+            new_entry->target.fs_resource.name = name;
+            new_entry->target.fs_resource.perms = perms;
             break;
         case(net_entry):
-            new_entry->name.net_dest = name;
+            new_entry->target.net_dest.name = name;
+            new_entry->target.net_dest.op = perms;
             break;
         default:
             goto fail;
     }
 
-    new_entry->perms = perms;
     new_entry->data_type = data_type;
     // insert at head of linked list
     new_entry->next = *acl;
@@ -118,12 +119,12 @@ struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *policy,
         // on each before we determine if we've found the requested ACL entry
         switch (runner->entry_type) {
         case(resource_entry):
-            if (!strncmp(runner->name.resource, name, strlen(name))) {
+            if (!strncmp(runner->target.fs_resource.name, name, strlen(name))) {
                 return runner;
             }
             break;
         case(net_entry):
-            if (!strncmp(runner->name.net_dest, name, strlen(name))) {
+            if (!strncmp(runner->target.net_dest.name, name, strlen(name))) {
                 return runner;
             }
             break;
@@ -138,6 +139,20 @@ struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *policy,
     // if we get here, we don't have an ACL entry for this name
     // (resource or net destination)
     return NULL;
+}
+
+// Returns the allowed permissions or operations associated
+// with the given ACL entry
+uint32_t pyr_get_perms_from_acl(struct pyr_acl_entry *acl) {
+    switch (acl->entry_type) {
+        case(resource_entry):
+            return acl->target.fs_resource.perms;
+        case(net_entry):
+            return acl->target.net_dest.op;
+        default:
+            // FIXME: set errno here or something
+            return 0;
+        }
 }
 
 // Finds the lib policy for `lib` in the policy DB given by `policy_db`.
@@ -165,10 +180,10 @@ static void free_acl_entry(struct pyr_acl_entry **entry) {
     if (e->next == NULL) {
         switch (e->entry_type) {
         case(resource_entry):
-            e->name.resource = NULL;
+            e->target.fs_resource.name = NULL;
             break;
         case(net_entry):
-            e->name.net_dest = NULL;
+            e->target.net_dest.name = NULL;
             break;
         default:
             // FIXME: set errno here or something

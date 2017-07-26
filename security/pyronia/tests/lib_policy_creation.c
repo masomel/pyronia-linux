@@ -23,6 +23,13 @@ int main(int argc, char *argv[]) {
     names[2] = "/dev/cam2";
     names[3] = "/dev/cam3";
 
+    const char *net[4];
+    net[0] = "0.0.0.0";
+    net[1] = "8.8.8.8";
+    net[2] = "127.0.0.1";
+    net[3] = "255.255.255.255";
+
+
     struct pyr_acl_entry *acl;
     int err = 0;
 
@@ -33,7 +40,7 @@ int main(int argc, char *argv[]) {
         goto out;
     }
 
-    err = test_lib_policy_creation(libs, 4, names, &db);
+    err = test_lib_policy_creation(libs, 4, names, net, &db);
     if (err) {
         goto out;
     }
@@ -44,7 +51,6 @@ int main(int argc, char *argv[]) {
         struct pyr_acl_entry *a;
 
         p = pyr_find_lib_policy(db, libs[i]);
-
         if (p == NULL) {
             PYR_ERROR("Expected policy for %s, none found\n", libs[i]);
             err = 1;
@@ -54,6 +60,13 @@ int main(int argc, char *argv[]) {
         a = pyr_find_lib_acl_entry(p, names[i%4]);
         if (a == NULL) {
             PYR_ERROR("Expected ACL entry for %s, none found\n", names[i%4]);
+            err = 1;
+            goto out;
+        }
+
+        a = pyr_find_lib_acl_entry(p, net[i%4]);
+        if (a == NULL) {
+            PYR_ERROR("Expected ACL entry for %s, none found\n", net[i%4]);
             err = 1;
             goto out;
         }
