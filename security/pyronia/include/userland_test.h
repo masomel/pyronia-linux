@@ -19,13 +19,13 @@ static inline void kvfree(void *p) {
 
 #define PYR_DEBUG(fmt, args...)                                     \
     do {                                                            \
-        printf("[pyr] ");                                            \
+        printf("\t[pyr] ");                                            \
         printf(fmt, ##args);                                   \
     } while (0)
 
 #define PYR_ERROR(fmt, args...)                                         \
     do {                                                                \
-        printf("[pyr] Error: ");                                          \
+        printf("\t[pyr] Error: ");                                          \
         printf(fmt, ##args);                           \
     } while (0)
 

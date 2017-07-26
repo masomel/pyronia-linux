@@ -7,48 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../include/lib_policy.h"
-
-#include "../include/userland_test.h"
-
-static int test_acl_creation(const char *name, struct pyr_acl_entry **acl) {
-
-    struct pyr_acl_entry *a = NULL;
-    int i, err;
-
-    err = pyr_add_acl_entry(&a, resource_entry, name, 1,
-                                CAM_DATA);
-    if (err) {
-        return err;
-    }
-
-    *acl = a;
-    return 0;
-}
-
-static int test_lib_policy_creation(const char *libs[], int len,
-                                    const char *names[],
-                                    struct pyr_lib_policy_db **policy) {
-
-    int i, err;
-    for (i = 0; i < len; i++) {
-        struct pyr_acl_entry *acl = NULL;
-
-        err = test_acl_creation(names[i%len], &acl);
-        if (err) {
-            PYR_ERROR("pyr_add_acl_entry returned %d\n", err);
-            return err;
-        }
-
-        err = pyr_add_lib_policy(policy, libs[i], acl);
-        if (err) {
-            PYR_ERROR("pyr_add_lib_policy returned %d\n", err);
-            return err;
-        }
-    }
-
-    return 0;
-}
+#include "tests.h"
 
 int main(int argc, char *argv[]) {
 

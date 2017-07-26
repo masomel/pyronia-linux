@@ -1,5 +1,4 @@
-/** Tests the Pyronia library permissions
- * verification.
+/** Tests the Pyronia callgraph creation.
  *
  *@author Marcela S. Melara
  */
@@ -7,29 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "../include/callgraph.h"
-
-#include "../include/userland_test.h"
-
-static int test_callgraph_creation(const char *libs[], int len,
-                                   pyr_cg_node_t **cg) {
-
-    pyr_cg_node_t *child = NULL;
-    int i, err;
-    for (i = 0; i < len; i++) {
-        pyr_cg_node_t *next;
-
-        err = pyr_new_cg_node(&next, libs[i], CAM_DATA, child);
-        if (err) {
-            return err;
-        }
-
-        child = next;
-    }
-
-    *cg = child;
-    return 0;
-}
+#include "tests.h"
 
 int main(int argc, char *argv[]) {
 
