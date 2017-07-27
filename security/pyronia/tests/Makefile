@@ -9,6 +9,8 @@ TESTS = lib_policy_creation_test callgraph_creation_test \
 
 all: $(TESTS)
 
+ktest: ; $(CC) kernel_permissions_checker.c -o kernel_permissions_checker_test
+
 _DEPS = userland_test.h lib_policy.h callgraph.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 

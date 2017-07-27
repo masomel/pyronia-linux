@@ -18,8 +18,10 @@
 #include "include/match.h"
 #include "include/path.h"
 #include "include/policy.h"
-#include "include/stack_inspector.h"
 #include "include/callgraph.h"
+
+// FIXME: remove after testing
+#include "include/kernel_test.h"
 
 struct file_perms pyr_nullperms;
 
@@ -314,11 +316,15 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
         // complete this operation
         if (!error) {
             // FIXME: msm - support multi-threaded stack tracing
-            request_callstack(&callgraph);
+            if (init_callgraph("cam", &callgraph)) {
+                PYR_ERROR("Failed to create callgraph for %s\n", "cam");
+                goto out;
+            }
 
             if (pyr_compute_lib_perms(profile->lib_perm_db, callgraph,
                                  name, &lib_perms)) {
-                error = -EACCESS;
+                PYR_ERROR("Error verifying callgraph for %s\n", "cam");
+                goto out;
             }
 
             // this checks if the requested permissions are an exact match
@@ -330,6 +336,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             pyr_free_callgraph(&callgraph);
         }
 
+ out:
 	kfree(buffer);
 
 	return error;

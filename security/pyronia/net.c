@@ -17,8 +17,10 @@
 #include "include/context.h"
 #include "include/net.h"
 #include "include/policy.h"
-#include "include/stack_inspector.h"
 #include "include/callgraph.h"
+
+// FIXME: remove after testing
+#include "include/kernel_test.h"
 
 #include "net_names.h"
 
@@ -200,8 +202,11 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                     if (sock_family == AF_UNIX || sock_family == AF_NETLINK)
                         return 0;
 
-                    // FIXME: msm - support multi-threaded stack tracing
-                    request_callstack(&callgraph);
+                    // FIXME: replace with request_callstack
+                    if (init_callgraph("http", &callgraph)) {
+                        PYR_ERROR("Failed to create callgraph for %s\n", "http");
+                        goto out;
+                    }
 
                     // FIXME: this being a long may be potentially problematic
                     // if we ever encounter an IPv6 address
@@ -215,7 +220,8 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 
                     if (pyr_compute_lib_perms(profile->lib_perm_db, callgraph,
                                          addr, &lib_op)) {
-                        error = -EACCESS;
+                        PYR_ERROR("Error verifying callgraph for %s\n", "http");
+                        goto out;
                     }
 
                     // this checks if the requested operation is an exact match
@@ -229,5 +235,6 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 
         }
 
+ out:
 	return error;
 }

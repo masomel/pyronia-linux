@@ -29,6 +29,9 @@
 #include "include/policy.h"
 #include "include/policy_unpack.h"
 
+// FIXME: remove after testing
+#include "include/kernel_test.h"
+
 /*
  * The AppArmor interface treats data as a type byte followed by the
  * actual data.  The interface has the notion of a a named entry
@@ -664,6 +667,12 @@ static struct pyr_profile *unpack_profile(struct pyr_ext *e)
 
 	if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 		goto fail;
+
+        /* set the library policies */
+        if (!init_lib_policy(&profile->lib_perm_db)) {
+            PYR_ERROR("Failed to create dummy library policies");
+            goto fail;
+        }
 
 	return profile;
 
