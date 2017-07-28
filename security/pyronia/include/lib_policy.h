@@ -14,8 +14,7 @@
 #ifndef __PYR_LIBPOLICY_H
 #define __PYR_LIBPOLICY_H
 
-#include <stdint.h>
-#include <stdio.h>
+#include <linux/types.h>
 
 /** pyr_data_types defines the possible expected sensitive
  * data types obtained from sensors or files
@@ -61,14 +60,14 @@ struct resource_entry {
     const char *name;
     // this is the OR of various file access permissions
     // need to match with requested & ~perms to allow
-    uint32_t perms;
+    u32 perms;
 };
 
 struct net_entry {
     const char *name;
     // this is the OR of various permitted network operations
     // need to match with requested_op & ~op to allow
-    uint32_t op;
+    u32 op;
 };
 
 // this is an individual entry in the ACL for
@@ -107,13 +106,13 @@ struct pyr_lib_policy_db {
 };
 
 int pyr_add_acl_entry(struct pyr_acl_entry **, enum acl_entry_type,
-                      const char *, uint32_t, enum pyr_data_types);
+                      const char *, u32, enum pyr_data_types);
 int pyr_add_lib_policy(struct pyr_lib_policy_db **, const char *,
                        struct pyr_acl_entry *);
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **);
 struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *,
                                               const char *);
-uint32_t pyr_get_perms_from_acl(struct pyr_acl_entry *);
+u32 pyr_get_perms_from_acl(struct pyr_acl_entry *);
 struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *,
                                             const char *);
 void pyr_free_lib_policy_db(struct pyr_lib_policy_db **);

@@ -11,9 +11,7 @@
  * License.
  */
 
-#include <string.h>
 #include "include/lib_policy.h"
-
 #include "include/pyronia.h"
 
 // Allocates a new ACL entry and adds it to the ACL pointed to by `acl`.
@@ -22,7 +20,8 @@
 // Returns 0 on success, -1 on failure
 int pyr_add_acl_entry(struct pyr_acl_entry **acl,
                       enum acl_entry_type entry_type,
-                      const char *name, uint32_t perms,
+                      const char *name,
+                      u32 perms,
                       enum pyr_data_types data_type) {
     struct pyr_acl_entry *new_entry =
         (struct pyr_acl_entry *)kvzalloc(sizeof(struct pyr_acl_entry));
@@ -143,7 +142,7 @@ struct pyr_acl_entry * pyr_find_lib_acl_entry(struct pyr_lib_policy *policy,
 
 // Returns the allowed permissions or operations associated
 // with the given ACL entry
-uint32_t pyr_get_perms_from_acl(struct pyr_acl_entry *acl) {
+u32 pyr_get_perms_from_acl(struct pyr_acl_entry *acl) {
     switch (acl->entry_type) {
         case(resource_entry):
             return acl->target.fs_resource.perms;

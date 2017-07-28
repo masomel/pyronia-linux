@@ -4,6 +4,9 @@
  *@author Marcela S. Melara
  */
 
+#ifndef __KERNEL_TEST_H
+#define __KERNEL_TEST_H
+
 #include "lib_policy.h"
 #include "callgraph.h"
 
@@ -11,13 +14,13 @@ static const char *test_libs[3];
 
 static const char *test_names[2];
 
-static void init_testlibs() {
+static inline void init_testlibs(void) {
     test_libs[0] = "cam";
     test_libs[1] = "http";
     test_libs[2] = "img_processing";
 }
 
-static void init_testnames() {
+static inline void init_testnames(void) {
     test_names[0] = "/tmp/cam0";
     test_names[1] = "127.0.0.1";
 }
@@ -25,17 +28,22 @@ static void init_testnames() {
 // Create a dummy Pyronia policy for a test process
 // This policy will be tested when the appropriate LSM
 // checks are triggered at runtime
-static int init_lib_policy(struct pyr_lib_policy_db **policy) {
+static inline int init_lib_policy(struct pyr_lib_policy_db **policy) {
     int err = 0;
+    struct pyr_lib_policy_db *db;
+    struct pyr_acl_entry *acl;
+
+    init_testlibs();
+    init_testnames();
 
     // allocate the new policy db
-    struct pyr_lib_policy_db *db = NULL;
+    db = NULL;
     err = pyr_new_lib_policy_db(&db);
     if (err)
         goto fail;
 
     // create the ACL entry for "/tmp/cam0"
-    struct pyr_acl_entry *acl = NULL;
+    acl = NULL;
     err = pyr_add_acl_entry(&acl, resource_entry, test_names[0], 1,
                             CAM_DATA);
     if (err) {
@@ -71,7 +79,7 @@ static int init_lib_policy(struct pyr_lib_policy_db **policy) {
 // Create a dummy callgraph with the given library for a test process
 // This callgraph will be used to check the requested access/operation
 // at runtime
-static int init_callgraph(const char *lib, pyr_cg_node_t **cg) {
+static inline int init_callgraph(const char *lib, pyr_cg_node_t **cg) {
     int err = 0;
 
     pyr_cg_node_t *c = NULL;
@@ -85,3 +93,5 @@ static int init_callgraph(const char *lib, pyr_cg_node_t **cg) {
  out :
     return err;
 }
+
+#endif

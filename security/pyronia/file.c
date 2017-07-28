@@ -286,7 +286,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 {
 	char *buffer = NULL;
 	struct file_perms perms = {};
-        pyr_cg_node_t *callgraph = {};
+        pyr_cg_node_t *callgraph = NULL;
         u32 lib_perms;
 	const char *name, *info = NULL;
 	int error;
@@ -330,7 +330,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             // this checks if the requested permissions are an exact match
             // to the effective library permissions
             if (request & ~lib_perms) {
-                error = -EACCESS;
+                error = -EACCES;
             }
 
             pyr_free_callgraph(&callgraph);

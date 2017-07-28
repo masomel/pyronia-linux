@@ -12,6 +12,10 @@
  * License.
  */
 
+#include <linux/inet.h>
+#include <uapi/linux/in.h>
+#include <uapi/linux/in6.h>
+
 #include "include/pyronia.h"
 #include "include/audit.h"
 #include "include/context.h"
@@ -166,6 +170,27 @@ int pyr_revalidate_sk(int op, struct sock *sk)
 	return error;
 }
 
+static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
+{
+    int in_addr;
+    char *str = NULL;
+
+    if (sa->sa_family == AF_INET)
+        in_addr = (int)((struct sockaddr_in*)sa)->sin_addr.s_addr;
+    else {
+        // FIXME: Actually support IPv6 addresses
+        in_addr = (int)((struct sockaddr_in6*)sa)->sin6_addr.s6_addr32[0];
+    }
+
+    str = (char *)kvzalloc(INET6_ADDRSTRLEN);
+
+    if (str != NULL) {
+        sprintf(str, "%d", in_addr);
+    }
+
+    *addr_str = str;
+}
+
 /**
  * pyr_revalidate_sk - Revalidate access to a sock
  * @op: operation being checked
@@ -178,8 +203,9 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 	struct pyr_profile *profile;
 	int error = 0;
         unsigned short sock_family;
-        pyr_cg_node_t *callgraph = {};
+        pyr_cg_node_t *callgraph = NULL;
         u32 lib_op;
+        const char *addr;
 
 	/* pyr_revalidate_sk should not be called from interrupt context
 	 * don't mediate these calls as they are not task related
@@ -208,26 +234,27 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                         goto out;
                     }
 
-                    // FIXME: this being a long may be potentially problematic
-                    // if we ever encounter an IPv6 address
-                    unsigned long addr = 0;
-                    if (sock_family == AF_INET) {
-                        addr = ((sockaddr_in)address).sin_addr;
-                    }
-                    else if(sock_family == AF_INET6) {
-                        addr = ((sockaddr_in6)address).sin6_addr;
+                    in_addr_to_str(address, &addr);
+                    if (addr == NULL) {
+                        PYR_ERROR("Failed to convert IP address to string\n");
+                        goto out;
                     }
 
-                    if (pyr_compute_lib_perms(profile->lib_perm_db, callgraph,
-                                         addr, &lib_op)) {
+
+                    if (pyr_compute_lib_perms(profile->lib_perm_db,
+                                              callgraph,
+                                              addr, &lib_op)) {
                         PYR_ERROR("Error verifying callgraph for %s\n", "http");
                         goto out;
                     }
 
+                    // done with the address string, so free it
+                    kvfree(addr);
+
                     // this checks if the requested operation is an exact match
                     // to the effective library operation
                     if (op & ~lib_op) {
-                        error = -EACCESS;
+                        error = -EACCES;
                     }
 
                     pyr_free_callgraph(&callgraph);
