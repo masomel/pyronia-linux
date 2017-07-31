@@ -668,8 +668,8 @@ static struct pyr_profile *unpack_profile(struct pyr_ext *e)
 	if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 		goto fail;
 
-        /* set the library policies */
-        if (!init_lib_policy(&profile->lib_perm_db)) {
+        // Pyronia hook: set the library policies
+        if (init_lib_policy(&profile->lib_perm_db)) {
             PYR_ERROR("Failed to create dummy library policies");
             goto fail;
         }

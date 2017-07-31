@@ -221,7 +221,7 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                 // Pyronia hook: check the call stack to determine
                 // if the requesting library has permissions to
                 // complete this operation
-                if (!error) {
+                if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
                     sock_family = sk->sk_family;
 
                     /* unix domain and netlink sockets are handled by ipc */
@@ -230,13 +230,13 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 
                     // FIXME: replace with request_callstack
                     if (init_callgraph("http", &callgraph)) {
-                        PYR_ERROR("Failed to create callgraph for %s\n", "http");
+                        PYR_ERROR("Net - Failed to create callgraph for %s\n", "http");
                         goto out;
                     }
 
                     in_addr_to_str(address, &addr);
                     if (addr == NULL) {
-                        PYR_ERROR("Failed to convert IP address to string\n");
+                        PYR_ERROR("Net - Failed to convert IP address to string\n");
                         goto out;
                     }
 
@@ -244,7 +244,7 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                     if (pyr_compute_lib_perms(profile->lib_perm_db,
                                               callgraph,
                                               addr, &lib_op)) {
-                        PYR_ERROR("Error verifying callgraph for %s\n", "http");
+                        PYR_ERROR("Net - Error verifying callgraph for %s\n", "http");
                         goto out;
                     }
 

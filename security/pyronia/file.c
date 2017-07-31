@@ -234,7 +234,7 @@ static struct file_perms compute_perms(struct pyr_dfa *dfa, unsigned int state,
 /**
  * pyr_str_perms - find permission that match @name
  * @dfa: to match against  (MAYBE NULL)
- * @state: state to start matching in
+ * @start: state to start matching in
  * @name: string to match against dfa  (NOT NULL)
  * @cond: conditions to consider for permission set computation  (NOT NULL)
  * @perms: Returns - the permissions found when matching @name
@@ -296,7 +296,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 	if (error) {
 		if (error == -ENOENT && is_deleted(path->dentry)) {
 			/* Access to open files that are deleted are
-			 * give a pass (implicit delegation)
+			 * given a pass (implicit delegation)
 			 */
 			error = 0;
 			info = NULL;
@@ -314,22 +314,23 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
         // Pyronia hook: check the call stack to determine
         // if the requesting library has permissions to
         // complete this operation
-        if (!error) {
+        if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
             // FIXME: msm - support multi-threaded stack tracing
             if (init_callgraph("cam", &callgraph)) {
-                PYR_ERROR("Failed to create callgraph for %s\n", "cam");
+                PYR_ERROR("File - Failed to create callgraph for %s\n", "cam");
                 goto out;
             }
 
             if (pyr_compute_lib_perms(profile->lib_perm_db, callgraph,
                                  name, &lib_perms)) {
-                PYR_ERROR("Error verifying callgraph for %s\n", "cam");
+                PYR_ERROR("File - Error verifying callgraph for %s\n", "cam");
                 goto out;
             }
 
             // this checks if the requested permissions are an exact match
             // to the effective library permissions
             if (request & ~lib_perms) {
+                PYR_ERROR("File - Expected %d, got %d\n", lib_perms, request);
                 error = -EACCES;
             }
 

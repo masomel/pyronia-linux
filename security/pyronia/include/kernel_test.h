@@ -14,6 +14,14 @@ static const char *test_libs[3];
 
 static const char *test_names[2];
 
+#ifndef NUM_DEFAULT
+#define NUM_DEFAULT 1
+#endif
+
+static const char *default_names[1];
+
+static const char *test_prof = "/home/pyronia/kernel_permissions_checker_test";
+
 static inline void init_testlibs(void) {
     test_libs[0] = "cam";
     test_libs[1] = "http";
@@ -23,6 +31,35 @@ static inline void init_testlibs(void) {
 static inline void init_testnames(void) {
     test_names[0] = "/tmp/cam0";
     test_names[1] = "127.0.0.1";
+}
+
+// these files should be allowed for all libs by default
+static inline void init_default(void) {
+    default_names[0] = "/lib/x86_64-linux-gnu/libc-2.23.so";
+}
+
+static inline int create_default_policy_entries(struct pyr_lib_policy_db *policy,
+                                                const char *lib) {
+
+    struct pyr_acl_entry *acl = NULL;
+    int err = 0;
+
+    int i;
+    for (i = 0; i < NUM_DEFAULT; i++) {
+        err = pyr_add_acl_entry(&acl, resource_entry, default_names[i], 1,
+                            CAM_DATA);
+        if (err) {
+            return err;
+        }
+
+        // add a policy entry for lib to the permissions db
+        err = pyr_add_lib_policy(&policy, lib, acl);
+        if (err) {
+            return err;
+        }
+    }
+
+    return 0;
 }
 
 // Create a dummy Pyronia policy for a test process
@@ -35,6 +72,7 @@ static inline int init_lib_policy(struct pyr_lib_policy_db **policy) {
 
     init_testlibs();
     init_testnames();
+    init_default();
 
     // allocate the new policy db
     db = NULL;
@@ -56,7 +94,14 @@ static inline int init_lib_policy(struct pyr_lib_policy_db **policy) {
         goto fail;
     }
 
+    // add the default policies for "cam"
+    err = create_default_policy_entries(db, test_libs[0]);
+    if (err) {
+        goto fail;
+    }
+
     // create the ACL entry for "127.0.0.1"
+    acl = NULL;
     err = pyr_add_acl_entry(&acl, net_entry, test_names[1], 1,
                             CAM_DATA);
     if (err) {
@@ -65,6 +110,12 @@ static inline int init_lib_policy(struct pyr_lib_policy_db **policy) {
 
     // add a policy entry for "http" to the permissions db
     err = pyr_add_lib_policy(&db, test_libs[1], acl);
+    if (err) {
+        goto fail;
+    }
+
+    // add the default policies for "http"
+    err = create_default_policy_entries(db, test_libs[1]);
     if (err) {
         goto fail;
     }
