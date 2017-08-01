@@ -57,6 +57,11 @@ enum pyr_code {
 	PYR_ARRAYEND,
 };
 
+// Stores the files and their corresponding permissions.
+// Populated during the DFA unpacking.
+// Individual entries are freed when the entire profile is freed
+static struct resource_entry *file_perms_map;
+
 /*
  * pyr_ext is the read of the buffer containing the serialized profile.  The
  * data is copied into a kernel buffer in pyroniafs and then handed off to
@@ -668,9 +673,15 @@ static struct pyr_profile *unpack_profile(struct pyr_ext *e)
 	if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 		goto fail;
 
-        // Pyronia hook: set the library policies
+        // Pyronia hooks: set the library policies
         if (init_lib_policy(&profile->lib_perm_db)) {
             PYR_ERROR("Failed to create dummy library policies");
+            goto fail;
+        }
+
+        // set the lib file perms from the dfa
+        if (set_file_perms(profile)) {
+            PYR_ERROR("Failed to set dummy library file perms");
             goto fail;
         }
 

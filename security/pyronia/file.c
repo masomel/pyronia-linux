@@ -165,7 +165,7 @@ int pyr_audit_file(struct pyr_profile *profile, struct file_perms *perms,
  *
  * Returns: new permission mapping
  */
-static u32 map_old_perms(u32 old)
+u32 map_old_perms(u32 old)
 {
 	u32 new = old & 0xf;
 	if (old & MAY_READ)
@@ -330,7 +330,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             // this checks if the requested permissions are an exact match
             // to the effective library permissions
             if (request & ~lib_perms) {
-                PYR_ERROR("File - Expected %d, got %d\n", lib_perms, request);
+                PYR_ERROR("File - Expected %d, got %d; file: %s\n", lib_perms, request, name);
                 error = -EACCES;
             }
 

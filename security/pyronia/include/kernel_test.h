@@ -9,16 +9,19 @@
 
 #include "lib_policy.h"
 #include "callgraph.h"
+#include "audit.h"
+#include "file.h"
+#include "match.h"
 
 static const char *test_libs[3];
 
 static const char *test_names[2];
 
 #ifndef NUM_DEFAULT
-#define NUM_DEFAULT 1
+#define NUM_DEFAULT 2
 #endif
 
-static const char *default_names[1];
+static const char *default_names[NUM_DEFAULT];
 
 static const char *test_prof = "/home/pyronia/kernel_permissions_checker_test";
 
@@ -36,6 +39,7 @@ static inline void init_testnames(void) {
 // these files should be allowed for all libs by default
 static inline void init_default(void) {
     default_names[0] = "/lib/x86_64-linux-gnu/libc-2.23.so";
+    default_names[1] = "/etc/ld.cache.so";
 }
 
 static inline int create_default_policy_entries(struct pyr_lib_policy_db *policy,
@@ -102,7 +106,7 @@ static inline int init_lib_policy(struct pyr_lib_policy_db **policy) {
 
     // create the ACL entry for "127.0.0.1"
     acl = NULL;
-    err = pyr_add_acl_entry(&acl, net_entry, test_names[1], 1,
+    err = pyr_add_acl_entry(&acl, net_entry, test_names[1], OP_CONNECT,
                             CAM_DATA);
     if (err) {
         goto fail;
@@ -143,6 +147,63 @@ static inline int init_callgraph(const char *lib, pyr_cg_node_t **cg) {
     *cg = c;
  out :
     return err;
+}
+
+// Set the file rule permissions given a policy DFA
+static inline int set_file_perms(struct pyr_profile *profile) {
+
+    unsigned int state;
+    u32 perms;
+    struct pyr_acl_entry *acl;
+    struct pyr_lib_policy *policy;
+
+    // set the permissions for the default files
+    int i, j;
+    for (i = 0; i < 2; i++){
+        for (j = 0; j < NUM_DEFAULT; j++) {
+            state = pyr_dfa_match(profile->file.dfa, profile->file.start, default_names[j]);
+
+            perms = map_old_perms(dfa_user_allow(profile->file.dfa, state));
+            perms |= PYR_MAY_META_READ;
+
+            policy = pyr_find_lib_policy(profile->lib_perm_db, test_libs[i]);
+
+            if (policy == NULL) {
+                goto fail;
+            }
+
+            acl = pyr_find_lib_acl_entry(policy, default_names[j]);
+            if (acl == NULL) {
+                goto fail;
+            }
+
+            acl.target.fs_resource.perms = perms;
+        }
+
+        // set the permissions for the testname
+        state = pyr_dfa_match(profile->file.dfa, profile->file.start,
+                              test_names[0]);
+
+        perms = map_old_perms(dfa_user_allow(profile->file.dfa, state));
+        perms |= PYR_MAY_META_READ;
+
+        policy = pyr_find_lib_policy(profile->lib_perm_db, test_libs[i]);
+
+        if (policy == NULL) {
+            goto fail;
+        }
+
+        acl = pyr_find_lib_acl_entry(policy, test_libs[0]);
+        if (acl == NULL) {
+            goto fail;
+        }
+
+        acl.target.fs_resource.perms = perms;
+    }
+    return 0;
+
+ fail:
+    return -1;
 }
 
 #endif

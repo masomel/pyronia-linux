@@ -254,6 +254,8 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                     // this checks if the requested operation is an exact match
                     // to the effective library operation
                     if (op & ~lib_op) {
+                        PYR_ERROR("Net - Expected %d, got %d; file: %s\n", \
+                                  lib_op, op, addr);
                         error = -EACCES;
                     }
 
