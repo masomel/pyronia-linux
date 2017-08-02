@@ -172,23 +172,30 @@ int pyr_revalidate_sk(int op, struct sock *sk)
 
 static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
 {
-    int in_addr;
-    char *str = NULL;
+    int in_addr, printed_bytes;
+    char ip_str[16];
 
-    if (sa->sa_family == AF_INET)
+    if (sa->sa_family == AF_INET) {
         in_addr = (int)((struct sockaddr_in*)sa)->sin_addr.s_addr;
+
+        printed_bytes = snprintf(ip_str, INET_ADDRSTRLEN, "%d.%d.%d.%d",
+                                 (in_addr & 0xFF),
+                                 ((in_addr & 0xFF00) >> 8),
+                                 ((in_addr & 0xFF0000) >> 16),
+                                 ((in_addr & 0xFF000000) >> 24));
+
+        if (printed_bytes > sizeof(ip_str)) {
+            *addr_str = NULL;
+            return;
+        }
+
+        *addr_str = ip_str;
+    }
     else {
         // FIXME: Actually support IPv6 addresses
-        in_addr = (int)((struct sockaddr_in6*)sa)->sin6_addr.s6_addr32[0];
+        //in_addr = (int)((struct sockaddr_in6*)sa)->sin6_addr.s6_addr32[0];
+        *addr_str = "IPv6 address";
     }
-
-    str = (char *)kvzalloc(INET6_ADDRSTRLEN);
-
-    if (str != NULL) {
-        sprintf(str, "%d", in_addr);
-    }
-
-    *addr_str = str;
 }
 
 /**

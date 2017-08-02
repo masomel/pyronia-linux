@@ -57,11 +57,6 @@ enum pyr_code {
 	PYR_ARRAYEND,
 };
 
-// Stores the files and their corresponding permissions.
-// Populated during the DFA unpacking.
-// Individual entries are freed when the entire profile is freed
-static struct resource_entry *file_perms_map;
-
 /*
  * pyr_ext is the read of the buffer containing the serialized profile.  The
  * data is copied into a kernel buffer in pyroniafs and then handed off to

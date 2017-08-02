@@ -12,6 +12,7 @@
 #include "audit.h"
 #include "file.h"
 #include "match.h"
+#include "pyronia.h"
 
 static const char *test_libs[3];
 
@@ -39,25 +40,25 @@ static inline void init_testnames(void) {
 // these files should be allowed for all libs by default
 static inline void init_default(void) {
     default_names[0] = "/lib/x86_64-linux-gnu/libc-2.23.so";
-    default_names[1] = "/etc/ld.cache.so";
+    default_names[1] = "/etc/ld.so.cache";
 }
 
-static inline int create_default_policy_entries(struct pyr_lib_policy_db *policy,
+static inline int create_default_policy_entries(struct pyr_lib_policy_db *db,
                                                 const char *lib) {
 
-    struct pyr_acl_entry *acl = NULL;
+    struct pyr_lib_policy *policy = NULL;
     int err = 0;
 
     int i;
     for (i = 0; i < NUM_DEFAULT; i++) {
-        err = pyr_add_acl_entry(&acl, resource_entry, default_names[i], 1,
-                            CAM_DATA);
-        if (err) {
-            return err;
+        policy = pyr_find_lib_policy(db, lib);
+
+        if (policy == NULL) {
+            return -1;
         }
 
-        // add a policy entry for lib to the permissions db
-        err = pyr_add_lib_policy(&policy, lib, acl);
+        err = pyr_add_acl_entry(&(policy->acl), resource_entry,
+                                default_names[i], 1, CAM_DATA);
         if (err) {
             return err;
         }
@@ -169,37 +170,42 @@ static inline int set_file_perms(struct pyr_profile *profile) {
             policy = pyr_find_lib_policy(profile->lib_perm_db, test_libs[i]);
 
             if (policy == NULL) {
+                PYR_ERROR("Couldn't find policy for %s\n", test_libs[i]);
                 goto fail;
             }
 
             acl = pyr_find_lib_acl_entry(policy, default_names[j]);
             if (acl == NULL) {
+                PYR_ERROR("Couldn't find ACL for %s in %s policy\n", default_names[i], test_libs[i]);
                 goto fail;
             }
 
-            acl.target.fs_resource.perms = perms;
+            acl->target.fs_resource.perms = perms;
         }
-
-        // set the permissions for the testname
-        state = pyr_dfa_match(profile->file.dfa, profile->file.start,
-                              test_names[0]);
-
-        perms = map_old_perms(dfa_user_allow(profile->file.dfa, state));
-        perms |= PYR_MAY_META_READ;
-
-        policy = pyr_find_lib_policy(profile->lib_perm_db, test_libs[i]);
-
-        if (policy == NULL) {
-            goto fail;
-        }
-
-        acl = pyr_find_lib_acl_entry(policy, test_libs[0]);
-        if (acl == NULL) {
-            goto fail;
-        }
-
-        acl.target.fs_resource.perms = perms;
     }
+
+    // set the permissions for the /tmp/cam0 resource
+    state = pyr_dfa_match(profile->file.dfa, profile->file.start,
+                          test_names[0]);
+
+    perms = map_old_perms(dfa_user_allow(profile->file.dfa, state));
+    perms |= PYR_MAY_META_READ;
+
+    policy = pyr_find_lib_policy(profile->lib_perm_db, test_libs[0]);
+
+    if (policy == NULL) {
+        PYR_ERROR("Couldn't find policy for %s\n", test_libs[0]);
+        goto fail;
+    }
+
+    acl = pyr_find_lib_acl_entry(policy, test_names[0]);
+    if (acl == NULL) {
+        PYR_ERROR("Couldn't find ACL for %s in %s policy\n", test_names[0], test_libs[0]);
+        goto fail;
+    }
+
+    acl->target.fs_resource.perms = perms;
+
     return 0;
 
  fail:
