@@ -238,39 +238,48 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                     // FIXME: replace with request_callstack
                     if (init_callgraph("http", &callgraph)) {
                         PYR_ERROR("Net - Failed to create callgraph for %s\n", "http");
+                        error = -EACCES;
                         goto out;
                     }
+
+     		    if (address == NULL) {
+			PYR_ERROR("Net - No address to check\n");
+                        error = -EACCES;
+                        goto out;
+		    }
 
                     in_addr_to_str(address, &addr);
                     if (addr == NULL) {
                         PYR_ERROR("Net - Failed to convert IP address to string\n");
+                        error = -EACCES;
                         goto out;
                     }
-
 
                     if (pyr_compute_lib_perms(profile->lib_perm_db,
                                               callgraph,
                                               addr, &lib_op)) {
                         PYR_ERROR("Net - Error verifying callgraph for %s\n", "http");
+                        error = -EACCES;
                         goto out;
                     }
 
-                    // done with the address string, so free it
-                    kvfree(addr);
-
-                    // this checks if the requested operation is an exact match
-                    // to the effective library operation
+                    // this checks if the requested operation is an
+                    // exact match to the effective library operation
                     if (op & ~lib_op) {
                         PYR_ERROR("Net - Expected %d, got %d; file: %s\n", \
                                   lib_op, op, addr);
                         error = -EACCES;
                     }
 
-                    pyr_free_callgraph(&callgraph);
+                    PYR_ERROR("Net - Operation allowed for %s\n", addr);
+
+                    // done with the address string, so free it
+                    kvfree(addr);
                 }
 
         }
 
  out:
+        pyr_free_callgraph(&callgraph);
 	return error;
 }

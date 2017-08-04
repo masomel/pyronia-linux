@@ -1,0 +1,5 @@
+#!/bin/bash
+
+sudo cp home.pyronia.kernel_permissions_checker_test /etc/pyronia.d
+sudo apparmor_parser -rC /etc/pyronia.d/home.pyronia.kernel_permissions_checker_test
+sh -c 'echo -n "all" > /sys/modules/pyronia/parameters/audit'

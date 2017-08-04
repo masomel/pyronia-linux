@@ -1,0 +1,4 @@
+#!/bin/bash
+
+rsync -rzv marcela@pluto.cs.princeton.edu:/home/marcela/build .
+sudo make O=/home/pyronia/build/kernel modules_install install

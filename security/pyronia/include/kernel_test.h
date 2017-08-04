@@ -167,6 +167,8 @@ static inline int set_file_perms(struct pyr_profile *profile) {
             perms = map_old_perms(dfa_user_allow(profile->file.dfa, state));
             perms |= PYR_MAY_META_READ;
 
+            PYR_ERROR("Access to %s from %s: %d\n", default_names[j], test_libs[i], perms);
+
             policy = pyr_find_lib_policy(profile->lib_perm_db, test_libs[i]);
 
             if (policy == NULL) {
@@ -190,6 +192,8 @@ static inline int set_file_perms(struct pyr_profile *profile) {
 
     perms = map_old_perms(dfa_user_allow(profile->file.dfa, state));
     perms |= PYR_MAY_META_READ;
+
+    PYR_ERROR("Access to %s from %s: %d\n", test_names[0], test_libs[0], perms);
 
     policy = pyr_find_lib_policy(profile->lib_perm_db, test_libs[0]);
 

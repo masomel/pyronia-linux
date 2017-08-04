@@ -318,12 +318,14 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             // FIXME: msm - support multi-threaded stack tracing
             if (init_callgraph("cam", &callgraph)) {
                 PYR_ERROR("File - Failed to create callgraph for %s\n", "cam");
+                error = -EACCES;
                 goto out;
             }
 
             if (pyr_compute_lib_perms(profile->lib_perm_db, callgraph,
                                  name, &lib_perms)) {
                 PYR_ERROR("File - Error verifying callgraph for %s\n", "cam");
+                error = -EACCES;
                 goto out;
             }
 
@@ -334,12 +336,12 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 error = -EACCES;
             }
 
-            pyr_free_callgraph(&callgraph);
+            PYR_ERROR("File - Operation allowed for %s\n", name);
         }
 
  out:
 	kfree(buffer);
-
+        pyr_free_callgraph(&callgraph);
 	return error;
 }
 
