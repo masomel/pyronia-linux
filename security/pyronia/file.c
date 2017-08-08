@@ -258,6 +258,35 @@ unsigned int pyr_str_perms(struct pyr_dfa *dfa, unsigned int start,
 }
 
 /**
+ * pyr_cg_perms - find the library permission that matches @name
+ * @lib_perm_db: library permissions DB to search in
+ * @name: string to match in the library permissions DB  (NOT NULL)
+ * @lib_perms: Returns - the effective permissions computed from the callgraph @name
+ *
+ * @lib_perms is set to 0 if computing the permissions fails
+ */
+static void pyr_cg_perms(struct pyr_lib_policy_db *lib_perm_db,
+                         const char *name, u32 *lib_perms) {
+    pyr_cg_node_t *callgraph = NULL;
+    u32 perms = 0;
+
+    if (init_callgraph("cam", &callgraph)) {
+        PYR_ERROR("File - Failed to create callgraph for %s\n", "cam");
+        goto out;
+    }
+
+    if (pyr_compute_lib_perms(lib_perm_db, callgraph,
+                              name, &perms)) {
+        PYR_ERROR("File - Error verifying callgraph for %s\n", "cam");
+        goto out;
+    }
+
+ out:
+    pyr_free_callgraph(&callgraph);
+    *lib_perms = perms;
+}
+
+/**
  * is_deleted - test if a file has been completely unlinked
  * @dentry: dentry of file to test for deletion  (NOT NULL)
  *
@@ -286,7 +315,6 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 {
 	char *buffer = NULL;
 	struct file_perms perms = {};
-        pyr_cg_node_t *callgraph = NULL;
         u32 lib_perms;
 	const char *name, *info = NULL;
 	int error;
@@ -303,31 +331,18 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 			perms.allow = request;
 		}
 	} else {
-		pyr_str_perms(profile->file.dfa, profile->file.start, name, cond,
-			     &perms);
+		pyr_str_perms(profile->file.dfa, profile->file.start, name,
+                              cond, &perms);
 		if (request & ~perms.allow)
 			error = -EACCES;
 	}
-	error = pyr_audit_file(profile, &perms, GFP_KERNEL, op, request, name,
-			      NULL, cond->uid, info, error);
 
         // Pyronia hook: check the call stack to determine
         // if the requesting library has permissions to
         // complete this operation
         if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
             // FIXME: msm - support multi-threaded stack tracing
-            if (init_callgraph("cam", &callgraph)) {
-                PYR_ERROR("File - Failed to create callgraph for %s\n", "cam");
-                error = -EACCES;
-                goto out;
-            }
-
-            if (pyr_compute_lib_perms(profile->lib_perm_db, callgraph,
-                                 name, &lib_perms)) {
-                PYR_ERROR("File - Error verifying callgraph for %s\n", "cam");
-                error = -EACCES;
-                goto out;
-            }
+            pyr_cg_perms(profile->lib_perm_db, name, &lib_perms);
 
             // this checks if the requested permissions are an exact match
             // to the effective library permissions
@@ -335,13 +350,14 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 PYR_ERROR("File - Expected %d, got %d; file: %s\n", lib_perms, request, name);
                 error = -EACCES;
             }
-
-            PYR_ERROR("File - Operation allowed for %s\n", name);
+            else
+                PYR_ERROR("File - Operation allowed for %s\n", name);
         }
 
- out:
+	error = pyr_audit_file(profile, &perms, GFP_KERNEL, op, request, name,
+			      NULL, cond->uid, info, error);
+
 	kfree(buffer);
-        pyr_free_callgraph(&callgraph);
 	return error;
 }
 
