@@ -344,6 +344,12 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             // FIXME: msm - support multi-threaded stack tracing
             pyr_cg_perms(profile->lib_perm_db, name, &lib_perms);
 
+            // ugh, we have to make an exception for the console
+            // otherwise our program will hate itself every time
+            // it tries to print to stdout or stderr
+            if (!strncmp(name, "/dev/pts/", 9))
+                lib_perms = request;
+
             // this checks if the requested permissions are an exact match
             // to the effective library permissions
             if (request & ~lib_perms) {

@@ -1,4 +1,6 @@
 #!/bin/bash
 
-rsync -rzv marcela@pluto.cs.princeton.edu:/home/marcela/build .
+cd /home/pyronia/pyronia-lsm
+git pull
+make O=/home/pyronia/build/kernel
 sudo make O=/home/pyronia/build/kernel modules_install install
