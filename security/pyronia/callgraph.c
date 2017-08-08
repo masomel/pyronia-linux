@@ -111,6 +111,10 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
 static void free_node(pyr_cg_node_t **node) {
     pyr_cg_node_t *n = *node;
 
+    if (n == NULL) {
+      return;
+    }
+    
     if (n->child == NULL) {
         n->lib = NULL;
         kvfree(n);

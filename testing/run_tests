@@ -4,6 +4,7 @@ HOST=marcela@pluto.cs.princeton.edu
 SRC=/home/marcela/Research/lib-isolation/pyronia-lsm/security/pyronia/tests
 
 touch /tmp/cam0
-rsync -zv $HOST:$SRC/kernel_permissions_checker.c
+rsync -zv $HOST:$SRC/kernel_permissions_checker.c /home/pyronia
+cd /home/pyronia
 gcc -o kernel_permissions_checker_test kernel_permissions_checker.c
 ./kernel_permissions_checker_test

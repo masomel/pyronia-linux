@@ -176,6 +176,10 @@ struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *policy_db,
 static void free_acl_entry(struct pyr_acl_entry **entry) {
     struct pyr_acl_entry *e = *entry;
 
+    if (e == NULL) {
+      return;
+    }
+
     if (e->next == NULL) {
         switch (e->entry_type) {
         case(resource_entry):
@@ -199,6 +203,10 @@ static void free_acl_entry(struct pyr_acl_entry **entry) {
 // Recursively free the lib policies
 static void free_lib_policy(struct pyr_lib_policy **policy) {
     struct pyr_lib_policy *p = *policy;
+
+    if (p == NULL) {
+      return;
+    }
 
     if (p->next == NULL) {
         p->lib = NULL;
