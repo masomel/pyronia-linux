@@ -265,7 +265,7 @@ unsigned int pyr_str_perms(struct pyr_dfa *dfa, unsigned int start,
  *
  * @lib_perms is set to 0 if computing the permissions fails
  */
-static void pyr_cg_perms(struct pyr_lib_policy_db *lib_perm_db,
+static void pyr_cg_file_perms(struct pyr_lib_policy_db *lib_perm_db,
                          const char *name, u32 *lib_perms) {
     pyr_cg_node_t *callgraph = NULL;
     u32 perms = 0;
@@ -349,7 +349,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             }
             else {
                 // FIXME: msm - support multi-threaded stack tracing
-                pyr_cg_perms(profile->lib_perm_db, name, &lib_perms);
+                pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
             }
 
             // this checks if the requested permissions are an exact match

@@ -198,6 +198,30 @@ static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
     }
 }
 
+static void pyr_cg_net_perms(struct pyr_lib_policy_db *lib_perm_db,
+                             const char *addr, u32 *lib_op) {
+
+    pyr_cg_node_t *callgraph = NULL;
+    u32 op = 0;
+
+    // FIXME: replace with request_callstack
+    if (init_callgraph("http", &callgraph)) {
+        PYR_ERROR("Net - Failed to create callgraph for %s\n", "http");
+        goto out;
+    }
+
+    if (pyr_compute_lib_perms(lib_perm_db,
+                              callgraph,
+                              addr, &op)) {
+        PYR_ERROR("Net - Error verifying callgraph for %s\n", "http");
+        goto out;
+    }
+
+ out:
+    pyr_free_callgraph(&callgraph);
+    *lib_op = op;
+}
+
 /**
  * pyr_revalidate_sk - Revalidate access to a sock
  * @op: operation being checked
@@ -210,7 +234,6 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 	struct pyr_profile *profile;
 	int error = 0;
         unsigned short sock_family;
-        pyr_cg_node_t *callgraph = NULL;
         u32 lib_op;
         const char *addr;
 
@@ -222,64 +245,48 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 
 	profile = __pyr_current_profile();
 	if (!unconfined(profile)) {
-		error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
-				    sk->sk_protocol, sk);
+            error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
+                                 sk->sk_protocol, sk);
 
-                // Pyronia hook: check the call stack to determine
-                // if the requesting library has permissions to
-                // complete this operation
-                if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
-                    sock_family = sk->sk_family;
+            // Pyronia hook: check the call stack to determine
+            // if the requesting library has permissions to
+            // complete this operation
+            if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
+                sock_family = sk->sk_family;
 
-                    /* unix domain and netlink sockets are handled by ipc */
-                    if (sock_family == AF_UNIX || sock_family == AF_NETLINK)
-                        return 0;
+                /* unix domain and netlink sockets are handled by ipc */
+                if (sock_family == AF_UNIX || sock_family == AF_NETLINK)
+                    return 0;
 
-                    // FIXME: replace with request_callstack
-                    if (init_callgraph("http", &callgraph)) {
-                        PYR_ERROR("Net - Failed to create callgraph for %s\n", "http");
-                        error = -EACCES;
-                        goto out;
-                    }
-
-     		    if (address == NULL) {
-			PYR_ERROR("Net - No address to check\n");
-                        error = -EACCES;
-                        goto out;
-		    }
-
+                // make sure we have an address to check
+                if (address == NULL) {
+                    PYR_ERROR("Net - No address to check\n");
+                    addr = "";
+                }
+                else {
                     in_addr_to_str(address, &addr);
                     if (addr == NULL) {
                         PYR_ERROR("Net - Failed to convert IP address to string\n");
-                        error = -EACCES;
-                        goto out;
+                        addr = "";
                     }
-
-                    if (pyr_compute_lib_perms(profile->lib_perm_db,
-                                              callgraph,
-                                              addr, &lib_op)) {
-                        PYR_ERROR("Net - Error verifying callgraph for %s\n", "http");
-                        error = -EACCES;
-                        goto out;
-                    }
-
-                    // this checks if the requested operation is an
-                    // exact match to the effective library operation
-                    if (op & ~lib_op) {
-                        PYR_ERROR("Net - Expected %d, got %d; file: %s\n", \
-                                  lib_op, op, addr);
-                        error = -EACCES;
-                    }
-
-                    PYR_ERROR("Net - Operation allowed for %s\n", addr);
-
-                    // done with the address string, so free it
-                    kvfree(addr);
                 }
 
+                // compute the permissions
+                pyr_cg_net_perms(profile->lib_perm_db, addr,
+                                 &lib_op)
+
+                // this checks if the requested operation is an
+                // exact match to the effective library operation
+                if (op & ~lib_op) {
+                    PYR_ERROR("Net - Expected %d, got %d; addr: %s\n",  \
+                              lib_op, op, addr);
+                    error = -EACCES;
+                }
+                else {
+                    PYR_ERROR("Net - Operation allowed for %s\n", addr);
+                }
+            }
         }
 
- out:
-        pyr_free_callgraph(&callgraph);
 	return error;
 }
