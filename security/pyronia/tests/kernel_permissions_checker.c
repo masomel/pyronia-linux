@@ -9,7 +9,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-
+#include <error.h>
+#include <errno.h>
 
 /*** Copied from Beej's Guide */
 #define PORT "8000"
@@ -72,15 +73,21 @@ static int test_connect() {
 int main(int argc, char *argv[]) {
 
     // first trigger file access permissions check
-    FILE *f;
+    printf("Attempting to read from the fake camera... ");
+    File *f;
     f = fopen("/tmp/cam0", "r");
 
-    fclose(f);
+    if (f == NULL)
+        printf("%s\n", strerror(errno));
+    else {
+        printf("success\n");
+        fclose(f);
+    }
 
     // next, trigger socket connect check
-    if (test_connect()) {
-        return -1;
-    }
+    //if (test_connect()) {
+    //    return -1;
+    //}
 
     return 0;
 }

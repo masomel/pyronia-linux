@@ -341,14 +341,16 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
         // if the requesting library has permissions to
         // complete this operation
         if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
-            // FIXME: msm - support multi-threaded stack tracing
-            pyr_cg_perms(profile->lib_perm_db, name, &lib_perms);
-
             // ugh, we have to make an exception for the console
             // otherwise our program will hate itself every time
             // it tries to print to stdout or stderr
-            if (!strncmp(name, "/dev/pts/", 9))
+            if (!strncmp(name, "/dev/pts/", 9)) {
                 lib_perms = request;
+            }
+            else {
+                // FIXME: msm - support multi-threaded stack tracing
+                pyr_cg_perms(profile->lib_perm_db, name, &lib_perms);
+            }
 
             // this checks if the requested permissions are an exact match
             // to the effective library permissions
@@ -360,8 +362,8 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 PYR_ERROR("File - Operation allowed for %s\n", name);
         }
 
-	error = pyr_audit_file(profile, &perms, GFP_KERNEL, op, request, name,
-			      NULL, cond->uid, info, error);
+	error = pyr_audit_file(profile, &perms, GFP_KERNEL, op, request,
+                               name, NULL, cond->uid, info, error);
 
 	kfree(buffer);
 	return error;
