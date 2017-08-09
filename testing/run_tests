@@ -1,7 +1,10 @@
 #!/bin/bash
 
+HOME=/home/pyronia
+SRCDIR=$HOME/pyronia-lsm/security/pyronia/tests
+
 touch /tmp/cam0
 touch /tmp/cam1
-gcc -o /home/pyronia/kernel_permissions_checker_test kernel_permissions_checker.c
+gcc -o $HOME/kernel_permissions_checker_test $SRCDIR/kernel_permissions_checker.c
 cd /home/pyronia
 ./kernel_permissions_checker_test
