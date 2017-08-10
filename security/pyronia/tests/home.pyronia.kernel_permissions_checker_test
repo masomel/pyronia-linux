@@ -1,6 +1,6 @@
 /home/pyronia/kernel_permissions_checker_test {
 
-net tcp,
+network tcp,
 
 # these need to be included by default
 /etc/ld.so.cache r,

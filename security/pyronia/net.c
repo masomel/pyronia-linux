@@ -273,7 +273,7 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 
                 // compute the permissions
                 pyr_cg_net_perms(profile->lib_perm_db, addr,
-                                 &lib_op)
+                                 &lib_op);
 
                 // this checks if the requested operation is an
                 // exact match to the effective library operation

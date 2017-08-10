@@ -56,13 +56,14 @@ static int test_file_open_fail() {
         return -1;
     }
 
+    printf("\n");
     return 0;
 }
 
 static int test_file_open_write() {
     printf("-- Test: authorized file open for writing... ");
     FILE *f;
-    f = fopen("/tmp/cam1", "w");
+    f = fopen("/tmp/cam0", "w");
 
     if (f != NULL) {
         printf("Expected error\n");
@@ -75,11 +76,12 @@ static int test_file_open_write() {
         return -1;
     }
 
+    printf("\n");
     return 0;
 }
 
 static int test_connect() {
-    printf("-- Test: connect to authorized network address... \n");
+    printf("-- Test: connect to authorized network address... ");
     int sockfd, numbytes;
     struct addrinfo hints, *servinfo, *p;
     int rv;
@@ -92,33 +94,21 @@ static int test_connect() {
 
     if ((rv = getaddrinfo("127.0.0.1", PORT, &hints, &servinfo)) != 0) {
         printf("getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
+        return -1;
     }
 
-    // loop through all the results and connect to the first we can
-    for(p = servinfo; p != NULL; p = p->ai_next) {
-        inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
-              s, sizeof(s));
-        printf("Trying to connect to %s...", s);
-
-        if ((sockfd = socket(p->ai_family, p->ai_socktype,
-                p->ai_protocol)) == -1) {
-            printf("socket create error: %s\n", strerror(errno));
-            continue;
-        }
-
-        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            close(sockfd);
-            printf("socket connect error: %s\n", strerror(errno));
-            continue;
-        }
-
-        break;
+    if ((sockfd = socket(servinfo->ai_family, servinfo->ai_socktype,
+			 servinfo->ai_protocol)) == -1) {
+      printf("socket create error: %s\n", strerror(errno));
+      error = errno;
+      goto out;
     }
 
-    if (p == NULL) {
-        printf("Failed to connect\n");
-        return 2;
+    if (connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen) == -1) {
+      close(sockfd);
+      printf("socket connect error: %s\n", strerror(errno));
+      error = errno;
+      goto out;
     }
 
     printf("success\n");
@@ -128,10 +118,54 @@ static int test_connect() {
     return error;
 }
 
+static int test_connect_fail() {
+    printf("-- Test: connect to unauthorized network address...");
+    int sockfd, numbytes;
+    struct addrinfo hints, *servinfo, *p;
+    int rv;
+    char s[INET6_ADDRSTRLEN];
+    int error = 0;
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if ((rv = getaddrinfo("8.8.8.8", "80", &hints, &servinfo)) != 0) {
+        printf("getaddrinfo: %s\n", strerror(errno));
+        return -1;
+    }
+
+    if ((sockfd = socket(servinfo->ai_family, servinfo->ai_socktype,
+			 servinfo->ai_protocol)) == -1) {
+      printf("socket create error: %s\n", strerror(errno));
+      error = errno;
+      goto out;
+    }
+
+    if (connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen) != -1) {
+        printf("Expected error\n");
+        close(sockfd);
+        error = -1;
+	goto out;
+    }
+
+    if (errno != EACCES) {
+        printf("Expected %s, got %s\n", strerror(EACCES), strerror(errno));
+        error = -1;
+	goto out;
+    }
+
+    printf("\n");
+
+ out:
+    freeaddrinfo(servinfo); // all done with this structure
+    return error;
+}
+
 int main(int argc, char *argv[]) {
 
     int success = 0;
-    int total_tests = 4;
+    int total_tests = 5;
 
     // open(file, r) --> expect success
     if (!test_file_open()) {
@@ -148,8 +182,13 @@ int main(int argc, char *argv[]) {
         success++;
     }
 
-    // next, trigger socket connect check
+    // connect(host, port) --> expect success
     if (!test_connect()) {
+        success++;
+    }
+
+    // connect(bad host, bad port) --> expect fail
+    if (!test_connect_fail()) {
         success++;
     }
 
