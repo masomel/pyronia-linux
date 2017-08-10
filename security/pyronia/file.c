@@ -344,7 +344,12 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             // ugh, we have to make an exception for the console
             // otherwise our program will hate itself every time
             // it tries to print to stdout or stderr
-            if (!strncmp(name, "/dev/pts/", 9)) {
+            // FIXME: make the DNS-related files only accessible from
+            // the networking library
+            if (!strncmp(name, "/dev/pts/", 9) ||
+                !strncmp(name, "/etc/resolv.conf", 16) ||
+                !strncmp(name, "/etc/nsswitch.conf", 18) ||
+                !strncmp(name, "/lib/x86_64-linux-gnu/libnss_dns.so.2", 37)) {
                 lib_perms = request;
             }
             else {
