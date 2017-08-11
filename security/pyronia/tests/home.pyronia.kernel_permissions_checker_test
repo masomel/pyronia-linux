@@ -7,8 +7,11 @@ network tcp,
 /lib/x86_64-linux-gnu/libc-2.23.so rm,
 
 /etc/resolv.conf r,
+/run/resolvconf/resolv.conf r,
 /etc/nsswitch.conf r,
-/lib/x86_64-linux-gnu/libnss_dns.so.2 r,
+/lib/x86_64-linux-gnu/libnss_dns-2.23.so r,
+/lib/x86_64-linux-gnu/libnss_files-2.23.so r,
+/lib/x86_64-linux-gnu/libnss_mdns4_minimal.so.2 r,
 
 /tmp/cam0 r,
 

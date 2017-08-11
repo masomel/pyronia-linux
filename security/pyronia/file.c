@@ -25,6 +25,9 @@
 
 struct file_perms pyr_nullperms;
 
+#define DNS_LIB "/lib/x86_64-linux-gnu/libnss_dns-2.23.so"
+#define MDNS4_LIB "/lib/x86_64-linux-gnu/libnss_mdns4_minimal.so.2"
+#define FILES_LIB "/lib/x86_64-linux-gnu/libnss_files-2.23.so"
 
 /**
  * audit_file_mask - convert mask to permission string
@@ -349,7 +352,10 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             if (!strncmp(name, "/dev/pts/", 9) ||
                 !strncmp(name, "/etc/resolv.conf", 16) ||
                 !strncmp(name, "/etc/nsswitch.conf", 18) ||
-                !strncmp(name, "/lib/x86_64-linux-gnu/libnss_dns.so.2", 37)) {
+                !strncmp(name, "/run/resolvconf/resolv.conf", 27) ||
+                !strncmp(name, DNS_LIB, strlen(DNS_LIB)) ||
+                !strncmp(name, MDNS4_LIB, strlen(MDNS4_LIB)) ||
+                !strncmp(name, FILES_LIB, strlen(FILES_LIB))) {
                 lib_perms = request;
             }
             else {
