@@ -21,6 +21,9 @@
 
 #include "match.h"
 
+// msm: comment this out if we're not testing
+#define PYR_TESTING 1
+
 /*
  * Class of mediation types in the AppArmor policy db
  */

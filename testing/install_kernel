@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd /home/pyronia/pyronia-lsm
+cd /home/pyronia/pyronia-linux
 git pull
-make O=/home/pyronia/build/kernel
+make O=/home/pyronia/build/kernel -j 4
 sudo make O=/home/pyronia/build/kernel modules_install install

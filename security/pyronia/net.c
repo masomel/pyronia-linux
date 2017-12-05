@@ -23,8 +23,9 @@
 #include "include/policy.h"
 #include "include/callgraph.h"
 
-// FIXME: remove after testing
+#ifdef PYR_TESTING
 #include "include/kernel_test.h"
+#endif
 
 #include "net_names.h"
 
@@ -204,11 +205,14 @@ static void pyr_cg_net_perms(struct pyr_lib_policy_db *lib_perm_db,
     pyr_cg_node_t *callgraph = NULL;
     u32 op = 0;
 
-    // FIXME: replace with request_callstack
+    #ifdef PYR_TESTING
     if (init_callgraph("http", &callgraph)) {
         PYR_ERROR("Net - Failed to create callgraph for %s\n", "http");
         goto out;
     }
+    #else
+    // TODO: implement upcall to language runtime for callstack
+    #endif
 
     if (pyr_compute_lib_perms(lib_perm_db,
                               callgraph,

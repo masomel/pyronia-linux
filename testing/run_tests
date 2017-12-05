@@ -1,7 +1,7 @@
 #!/bin/bash
 
 HOME=/home/pyronia
-SRCDIR=$HOME/pyronia-lsm/security/pyronia/tests
+SRCDIR=$HOME/pyronia-linux/security/pyronia/tests
 
 touch /tmp/cam0
 touch /tmp/cam1

@@ -20,14 +20,15 @@
 #include "include/policy.h"
 #include "include/callgraph.h"
 
-// FIXME: remove after testing
+#ifdef PYR_TESTING
 #include "include/kernel_test.h"
-
-struct file_perms pyr_nullperms;
 
 #define DNS_LIB "/lib/x86_64-linux-gnu/libnss_dns-2.23.so"
 #define MDNS4_LIB "/lib/x86_64-linux-gnu/libnss_mdns4_minimal.so.2"
 #define FILES_LIB "/lib/x86_64-linux-gnu/libnss_files-2.23.so"
+#endif
+
+struct file_perms pyr_nullperms;
 
 /**
  * audit_file_mask - convert mask to permission string
@@ -273,10 +274,14 @@ static void pyr_cg_file_perms(struct pyr_lib_policy_db *lib_perm_db,
     pyr_cg_node_t *callgraph = NULL;
     u32 perms = 0;
 
+    #ifdef PYR_TESTING
     if (init_callgraph("cam", &callgraph)) {
         PYR_ERROR("File - Failed to create callgraph for %s\n", "cam");
         goto out;
     }
+    #else
+    // TODO: implement upcall to language runtime for callstack
+    #endif
 
     if (pyr_compute_lib_perms(lib_perm_db, callgraph,
                               name, &perms)) {
@@ -344,6 +349,9 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
         // if the requesting library has permissions to
         // complete this operation
         if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
+            #ifdef PYR_TESTING
+            // Move all of these to default policies added by the
+            // userspace policy parser
             // ugh, we have to make an exception for the console
             // otherwise our program will hate itself every time
             // it tries to print to stdout or stderr
@@ -362,6 +370,10 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 // FIXME: msm - support multi-threaded stack tracing
                 pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
             }
+            #else
+            // FIXME: msm - support multi-threaded stack tracing
+            pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
+            #endif
 
             // this checks if the requested permissions are an exact match
             // to the effective library permissions
