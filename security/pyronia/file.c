@@ -26,6 +26,7 @@
 #define DNS_LIB "/lib/x86_64-linux-gnu/libnss_dns-2.23.so"
 #define MDNS4_LIB "/lib/x86_64-linux-gnu/libnss_mdns4_minimal.so.2"
 #define FILES_LIB "/lib/x86_64-linux-gnu/libnss_files-2.23.so"
+#define RESOLV_LIB "/lib/x86_64-linux-gnu/libresolv-2.23.so"
 #endif
 
 struct file_perms pyr_nullperms;
@@ -361,8 +362,16 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 !strncmp(name, "/etc/resolv.conf", 16) ||
                 !strncmp(name, "/etc/nsswitch.conf", 18) ||
                 !strncmp(name, "/run/resolvconf/resolv.conf", 27) ||
+		!strncmp(name, "/etc/host.conf", 14) ||
+		!strncmp(name, "/etc/hosts", 10) ||
+		// FIXME: figure out what to do about these two,
+		// we don't want to just allow any lib to access these
+		// willy-nilly
+		!strncmp(name, "/usr/lib/", 9) ||
+		!strncmp(name, "/usr/lib/x86_64-linux-gnu/", 26) ||
                 !strncmp(name, DNS_LIB, strlen(DNS_LIB)) ||
                 !strncmp(name, MDNS4_LIB, strlen(MDNS4_LIB)) ||
+		!strncmp(name, RESOLV_LIB, strlen(RESOLV_LIB)) ||
                 !strncmp(name, FILES_LIB, strlen(FILES_LIB))) {
                 lib_perms = request;
             }

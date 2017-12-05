@@ -130,7 +130,7 @@ static int test_connect_fail() {
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
-    if ((rv = getaddrinfo("8.8.8.8", "80", &hints, &servinfo)) != 0) {
+    if ((rv = getaddrinfo("127.0.1.1", "80", &hints, &servinfo)) != 0) {
         printf("getaddrinfo: %s\n", strerror(errno));
         return -1;
     }
