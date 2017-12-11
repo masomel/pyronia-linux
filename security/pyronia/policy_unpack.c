@@ -29,8 +29,9 @@
 #include "include/policy.h"
 #include "include/policy_unpack.h"
 
-// FIXME: remove after testing
+#ifdef PYR_TESTING
 #include "include/kernel_test.h"
+#endif
 
 /*
  * The AppArmor interface treats data as a type byte followed by the
@@ -668,6 +669,7 @@ static struct pyr_profile *unpack_profile(struct pyr_ext *e)
 	if (!unpack_nameX(e, PYR_STRUCTEND, NULL))
 		goto fail;
 
+#ifdef PYR_TESTING
         // Pyronia hooks: set the library policies
         if (init_lib_policy(&profile->lib_perm_db)) {
             PYR_ERROR("Failed to create dummy library policies");
@@ -679,6 +681,7 @@ static struct pyr_profile *unpack_profile(struct pyr_ext *e)
             PYR_ERROR("Failed to set dummy library file perms");
             goto fail;
         }
+#endif
 
 	return profile;
 

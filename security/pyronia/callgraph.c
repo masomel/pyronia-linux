@@ -92,6 +92,11 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
             // take the intersection of the permissions
             eff_perm &= get_perms_for_name(cur_policy, name);
 
+
+#ifdef PYR_TESTING
+	    PYR_DEBUG("Callgraph - Current effective permissions for %s: %d\n", name, eff_perm);
+#endif
+	    
             // bail early since the callgraph so far already doesn't have
             // access to `name`
             if (eff_perm == 0) {
