@@ -2,5 +2,5 @@
 
 cd /home/pyronia/pyronia-linux
 git pull
-make O=/home/pyronia/build/kernel -j 4
+make O=/home/pyronia/build/kernel
 sudo make O=/home/pyronia/build/kernel modules_install install

@@ -7,4 +7,9 @@ touch /tmp/cam0
 touch /tmp/cam1
 gcc -o $HOME/kernel_permissions_checker_test $SRCDIR/kernel_permissions_checker.c
 cd /home/pyronia
+
+# make sure the LSM is properly set up
+./load_test_profile
+./restart_pyronia
+
 ./kernel_permissions_checker_test
