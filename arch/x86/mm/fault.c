@@ -27,6 +27,9 @@
 #define CREATE_TRACE_POINTS
 #include <asm/trace/exceptions.h>
 
+#include <linux/smv_mm.h>
+
+#ifndef _LINUX_SMV_H
 /*
  * Page fault error code bits:
  *
@@ -46,6 +49,7 @@ enum x86_pf_error_code {
 	PF_INSTR	=		1 << 4,
 	PF_PK		=		1 << 5,
 };
+#endif
 
 /*
  * Returns 0 if mmiotrace is disabled, or if the fault is not
@@ -803,20 +807,31 @@ static inline void
 show_signal_msg(struct pt_regs *regs, unsigned long error_code,
 		unsigned long address, struct task_struct *tsk)
 {
-	if (!unhandled_signal(tsk, SIGSEGV))
-		return;
+    struct vm_area_struct *walk = tsk->mm->mmap;
+    
+    if (!unhandled_signal(tsk, SIGSEGV))
+        return;
+    
+    if (!printk_ratelimit())
+        return;
+    
+    printk("%s%s[%d]: segfault at %lx ip %p sp %p error %lx",
+           task_pid_nr(tsk) > 1 ? KERN_INFO : KERN_EMERG,
+           tsk->comm, task_pid_nr(tsk), address,
+           (void *)regs->ip, (void *)regs->sp, error_code);
+    
+    print_vma_addr(KERN_CONT " in ", regs->ip);
 
-	if (!printk_ratelimit())
-		return;
+    printk(KERN_CONT "\n");
 
-	printk("%s%s[%d]: segfault at %lx ip %p sp %p error %lx",
-		task_pid_nr(tsk) > 1 ? KERN_INFO : KERN_EMERG,
-		tsk->comm, task_pid_nr(tsk), address,
-		(void *)regs->ip, (void *)regs->sp, error_code);
-
-	print_vma_addr(KERN_CONT " in ", regs->ip);
-
-	printk(KERN_CONT "\n");
+    /* Dump vma and their memdom id */
+    if (tsk->mm->using_smv) {	
+        while (walk) {
+            printk(KERN_ERR "[%s] smv %d vma->vm_start: 0x%16lx to vma->vm_end: 0x%16lx, vma->memdom_id: %d\n",
+                   __func__, tsk->smv_id, walk->vm_start, walk->vm_end, walk->memdom_id);	
+            walk = walk->vm_next;
+        }
+    }
 }
 
 static void
@@ -1161,6 +1176,34 @@ static inline bool smap_violation(int error_code, struct pt_regs *regs)
 	return true;
 }
 
+/* Taken from https://github.com/terry-hsu/smv/blob/master/kernelspace/linux-4.4.5-smv/arch/x86/mm/fault.c
+   For debugging: prints out the information about this page fault*/
+static noinline void fault_info(unsigned long addr,
+                                struct vm_area_struct *vma,
+                                unsigned long error_code, int *showed){
+    struct task_struct *tsk = current;
+    int prot_code = error_code & PF_PROT;
+    int write_code = error_code & PF_WRITE;
+    int user_code = error_code & PF_USER;
+    int rsvd_code = error_code & PF_RSVD;
+    int instr_code = error_code & PF_INSTR; 
+    unsigned long page_aligned_addr = addr & PAGE_MASK;
+
+    if ((!vma) || (!current->mm->using_smv) || (*showed != 0)) {
+        return;
+    }
+
+    slog(KERN_INFO "\n-- [%s] pid %d smv %d page fault at 0x%16lx, page_aligned_addr: 0x%16lx, vma->memdom_id: %d--\n",
+         __func__, tsk->pid, tsk->smv_id, addr, page_aligned_addr,
+         vma->memdom_id);
+    slog(KERN_INFO "-- [%s] prot: %d, write: %d, user: %d, rsvd: %d, instr_code: %d, vma->memdom_id: %d --\n",
+         __func__, prot_code, write_code, user_code, rsvd_code,
+         instr_code, vma->memdom_id);
+
+    /* Prevent printing recurring fault info */
+    *showed = 1;
+}
+
 /*
  * This routine handles page faults.  It determines the address,
  * and the problem, and then passes it off to one of the appropriate
@@ -1178,6 +1221,8 @@ __do_page_fault(struct pt_regs *regs, unsigned long error_code,
 	struct task_struct *tsk;
 	struct mm_struct *mm;
 	int fault, major = 0;
+        int showed_fault_info = 0;
+        struct vm_area_struct *walk;
 	unsigned int flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
 
 	tsk = current;
@@ -1345,6 +1390,36 @@ good_area:
 	if (unlikely(access_error(error_code, vma))) {
 		bad_area_access_error(regs, error_code, address, vma);
 		return;
+	}
+
+        /* SMV related checking, terminate a process if it issus 
+           smv invalid page fault */
+	if ( !smv_valid_fault(tsk->smv_id, vma, error_code) ){
+            int prot_code = error_code & PF_PROT;
+            int write_code = error_code & PF_WRITE;
+            int user_code = error_code & PF_USER;
+            int rsvd_code = error_code & PF_RSVD;
+            int instr_code = error_code & PF_INSTR; 
+            unsigned long page_aligned_addr = address & PAGE_MASK;
+            
+            printk(KERN_ERR "[%s] --- smv %d issued smv invalid fault, KILL task pid %d %s---\n", 
+                   __func__, tsk->smv_id, tsk->pid, tsk->comm);
+            printk(KERN_ERR "[%s] pid %d smv %d page fault at 0x%16lx, page_aligned_addr: 0x%16lx--\n",
+                   __func__, tsk->pid, tsk->smv_id, address, page_aligned_addr);
+            printk(KERN_ERR "[%s] vma->vm_start: 0x%16lx to vma->vm_end: 0x%16lx, vma->memdom_id: %d\n",
+                   __func__, vma->vm_start, vma->vm_end, vma->memdom_id);	
+            printk(KERN_ERR "[%s] prot: %d, write: %d, user: %d, rsvd: %d, instr_code: %d\n", 
+                   __func__, prot_code, write_code, user_code, rsvd_code, instr_code);
+            
+            walk = mm->mmap;
+            while (walk) {
+                printk(KERN_ERR "[%s] vma->vm_start: 0x%16lx to vma->vm_end: 0x%16lx, vma->memdom_id: %d\n",
+                       __func__, walk->vm_start, walk->vm_end, walk->memdom_id);	
+                walk = walk->vm_next;
+            }
+            fault_info(address, vma, error_code, &showed_fault_info);
+            bad_area_access_error(regs, error_code, address, vma);
+            return;
 	}
 
 	/*
