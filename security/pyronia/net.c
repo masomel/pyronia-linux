@@ -24,7 +24,11 @@
 #include "include/callgraph.h"
 
 #ifdef PYR_TESTING
+#if PYR_TESTING
 #include "include/kernel_test.h"
+#else
+#include "include/userland_test.h"
+#endif
 #endif
 
 #include "net_names.h"
@@ -112,7 +116,7 @@ static int audit_net(struct pyr_profile *profile, int op, u16 family, int type,
 }
 
 /**
- * pyr_net_perm - very course network access check
+ * pyr_net_perm - very coarse network access check
  * @op: operation being checked
  * @profile: profile being enforced  (NOT NULL)
  * @family: network family
@@ -206,10 +210,12 @@ static void pyr_cg_net_perms(struct pyr_lib_policy_db *lib_perm_db,
     u32 op = 0;
 
     #ifdef PYR_TESTING
+    #if PYR_TESTING
     if (init_callgraph("http", &callgraph)) {
         PYR_ERROR("Net - Failed to create callgraph for %s\n", "http");
         goto out;
     }
+    #endif
     #else
     // TODO: implement upcall to language runtime for callstack
     #endif

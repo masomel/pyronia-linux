@@ -30,7 +30,11 @@
 #include "include/policy_unpack.h"
 
 #ifdef PYR_TESTING
+#if PYR_TESTING
 #include "include/kernel_test.h"
+#else
+#include "include/userland_test.h"
+#endif
 #endif
 
 /*

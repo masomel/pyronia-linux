@@ -12,6 +12,7 @@
 #include "audit.h"
 #include "file.h"
 #include "match.h"
+#include "policy.h"
 #include "pyronia.h"
 
 static const char *test_libs[3];

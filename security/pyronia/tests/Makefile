@@ -1,15 +1,13 @@
 IDIR=../include
 LDIR=..
 CC=gcc
-CFLAGS=-iquote$(IDIR)
+CFLAGS=-iquote$(IDIR) -I../../../include -DPYR_TESTING=0
 MAKEFLAGS += --silent
 
 TESTS = lib_policy_creation_test callgraph_creation_test \
         policy_verification_test
 
 all: $(TESTS)
-
-ktest: ; $(CC) kernel_permissions_checker.c -o kernel_permissions_checker_test
 
 _DEPS = userland_test.h lib_policy.h callgraph.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))

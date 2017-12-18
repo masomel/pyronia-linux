@@ -14,6 +14,7 @@
 
 /*** Copied from Beej's Guide */
 #define PORT "8000"
+#define MAXDATASIZE 100
 
 // get sockaddr, IPv4 or IPv6:
 static void *get_in_addr(struct sockaddr *sa)
@@ -86,6 +87,7 @@ static int test_connect() {
     struct addrinfo hints, *servinfo, *p;
     int rv;
     char s[INET6_ADDRSTRLEN];
+    char buf[MAXDATASIZE];
     int error = 0;
 
     memset(&hints, 0, sizeof hints);
@@ -111,7 +113,15 @@ static int test_connect() {
       goto out;
     }
 
-    printf("success\n");
+    if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
+      printf("could not receive data from server: %s\n", strerror(errno));
+      error = errno;
+      goto out;
+    }
+
+    buf[numbytes] = '\0';
+    printf("success: Server sent '%s'\n", buf);
+    close(sockfd);
 
  out:
     freeaddrinfo(servinfo); // all done with this structure

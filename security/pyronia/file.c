@@ -21,12 +21,16 @@
 #include "include/callgraph.h"
 
 #ifdef PYR_TESTING
+#if PYR_TESTING
 #include "include/kernel_test.h"
 
 #define DNS_LIB "/lib/x86_64-linux-gnu/libnss_dns-2.23.so"
 #define MDNS4_LIB "/lib/x86_64-linux-gnu/libnss_mdns4_minimal.so.2"
 #define FILES_LIB "/lib/x86_64-linux-gnu/libnss_files-2.23.so"
 #define RESOLV_LIB "/lib/x86_64-linux-gnu/libresolv-2.23.so"
+#else
+#include "include/userland_test.h"
+#endif
 #endif
 
 struct file_perms pyr_nullperms;
@@ -276,10 +280,12 @@ static void pyr_cg_file_perms(struct pyr_lib_policy_db *lib_perm_db,
     u32 perms = 0;
 
     #ifdef PYR_TESTING
+    #if PYR_TESTING
     if (init_callgraph("cam", &callgraph)) {
         PYR_ERROR("File - Failed to create callgraph for %s\n", "cam");
         goto out;
     }
+    #endif
     #else
     // TODO: implement upcall to language runtime for callstack
     #endif
@@ -351,6 +357,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
         // complete this operation
         if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
             #ifdef PYR_TESTING
+	  #if PYR_TESTING
             // Move all of these to default policies added by the
             // userspace policy parser
             // ugh, we have to make an exception for the console
@@ -381,6 +388,10 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
             }
             #else
             // FIXME: msm - support multi-threaded stack tracing
+            pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
+	    #endif
+	    #else
+	    // FIXME: msm - support multi-threaded stack tracing
             pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
             #endif
 

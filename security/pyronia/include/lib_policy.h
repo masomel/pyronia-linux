@@ -14,7 +14,15 @@
 #ifndef __PYR_LIBPOLICY_H
 #define __PYR_LIBPOLICY_H
 
+#ifdef PYR_TESTING
+#if PYR_TESTING
 #include <linux/types.h>
+#else
+#include "userland_test.h"
+#endif
+#else
+#include <linux/types.h>
+#endif
 
 /** pyr_data_types defines the possible expected sensitive
  * data types obtained from sensors or files

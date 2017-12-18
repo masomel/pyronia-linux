@@ -12,7 +12,16 @@
  */
 
 #include "include/callgraph.h"
+
+#ifdef PYR_TESTING
+#if PYR_TESTING
+#include "include/kernel_test.h"
+#else
+#include "include/userland_test.h"
+#endif
+#else
 #include "include/pyronia.h"
+#endif
 
 // Allocate a new callgraph node
 int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
@@ -57,12 +66,16 @@ static u32 get_perms_for_name(struct pyr_lib_policy * policy,
 int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
                      pyr_cg_node_t * callgraph, const char *name,
                      u32 *perms) {
-
+  
     pyr_cg_node_t *cur_node = callgraph;
     int err = 0;
     u32 eff_perm = 0;
     struct pyr_lib_policy *cur_policy;
 
+#ifdef PYR_TESTING
+    PYR_DEBUG("Callgraph - Computing permissions for %s... \n", name);
+#endif
+    
     // want effective permission to start as root library in callgraph
     cur_policy = pyr_find_lib_policy(lib_policy_db, cur_node->lib);
 
@@ -75,6 +88,10 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     }
 
     eff_perm = get_perms_for_name(cur_policy, name);
+
+#ifdef PYR_TESTING
+    PYR_DEBUG("Callgraph - Initial permissions for %s: %d\n", name, eff_perm);
+#endif
 
     // bail early since the root already doesn't have permission
     // to access name
@@ -96,7 +113,7 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
 #ifdef PYR_TESTING
 	    PYR_DEBUG("Callgraph - Current effective permissions for %s: %d\n", name, eff_perm);
 #endif
-	    
+
             // bail early since the callgraph so far already doesn't have
             // access to `name`
             if (eff_perm == 0) {

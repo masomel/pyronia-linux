@@ -12,7 +12,16 @@
  */
 
 #include "include/lib_policy.h"
+
+#ifdef PYR_TESTING
+#if PYR_TESTING
+#include "include/kernel_test.h"
+#else
+#include "include/userland_test.h"
+#endif
+#else
 #include "include/pyronia.h"
+#endif
 
 // Allocates a new ACL entry and adds it to the ACL pointed to by `acl`.
 // This function can also be used to initialize `acl`.
