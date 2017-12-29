@@ -2469,7 +2469,7 @@ static int __split_vma(struct mm_struct *mm, struct vm_area_struct *vma,
 	else
 		err = vma_adjust(vma, vma->vm_start, addr, vma->vm_pgoff, new);
 
-        new->memdom_id = SMV_ARRAY_SIZE; // make new vma the main thread's
+        new->memdom_id = MAIN_THREAD; // make new vma the main thread's
 
 	/* Success. */
 	if (!err)
@@ -2809,7 +2809,7 @@ static int do_brk(unsigned long addr, unsigned long request)
 	vma->vm_pgoff = pgoff;
 	vma->vm_flags = flags;
 	vma->vm_page_prot = vm_get_page_prot(flags);
-        vma->memdom_id = SMV_ARRAY_SIZE; // make new vma the main thread's
+        vma->memdom_id = MAIN_THREAD; // make new vma the main thread's
 	vma_link(mm, vma, prev, rb_link, rb_parent);
 out:
 	perf_event_mmap(vma);
@@ -3145,7 +3145,7 @@ static struct vm_area_struct *__install_special_mapping(
 
 	vma->vm_ops = ops;
 	vma->vm_private_data = priv;
-        vma->memdom_id = SMV_ARRAY_SIZE; // make new vma the main thread's
+        vma->memdom_id = MAIN_THREAD; // make new vma the main thread's
 
 	ret = insert_vm_struct(mm, vma);
 	if (ret)
