@@ -3541,35 +3541,47 @@ static int handle_pte_fault(struct fault_env *fe)
 
 	if (!fe->pte) {
             if (vma_is_anonymous(fe->vma)) {
-                slog(KERN_INFO "[%s] addr 0x%16lx !fe->pte, calling do_anonymous_page\n", __func__, address);
+                if (fe->vma->vm_mm->using_smv) {
+                    slog(KERN_INFO "[%s] addr 0x%16lx !fe->pte, calling do_anonymous_page\n", __func__, fe->address);
+                }
                 return do_anonymous_page(fe);
             }
             else {
-	        slog(KERN_INFO "[%s] addr 0x%16lx !fe->pte, calling do_fault\n", __func__, address);
+                 if (fe->vma->vm_mm->using_smv) {
+                     slog(KERN_INFO "[%s] addr 0x%16lx !fe->pte, calling do_fault\n", __func__, fe->address);
+                 }
                 return do_fault(fe);
             }
 	}
 
 	if (!pte_present(entry)) {
-             slog(KERN_INFO "[%s] addr 0x%16lx not present\n", __func__, address);
-             slog(KERN_INFO "[%s] addr 0x%16lx, calling do_swap_page\n", __func__, address);
+             if (fe->vma->vm_mm->using_smv) {
+                 slog(KERN_INFO "[%s] addr 0x%16lx not present\n", __func__, fe->address);
+                 slog(KERN_INFO "[%s] addr 0x%16lx, calling do_swap_page\n", __func__, fe->address);
+             }
              return do_swap_page(fe, entry);
         }
 
 	if (pte_protnone(entry) && vma_is_accessible(fe->vma)) {
-            slog(KERN_INFO "[%s] addr 0x%16lx pte_protnone, calling do_numa_page\n", __func__, address);
+            if (fe->vma->vm_mm->using_smv) {
+                slog(KERN_INFO "[%s] addr 0x%16lx pte_protnone, calling do_numa_page\n", __func__, fe->address);
+            }
             return do_numa_page(fe, entry);
         }
 
 	fe->ptl = pte_lockptr(fe->vma->vm_mm, fe->pmd);
 	spin_lock(fe->ptl);
 	if (unlikely(!pte_same(*fe->pte, entry))) {
-            slog(KERN_INFO "[%s] addr 0x%16lx !pte_same, pte_val(*pte) 0x%16lx\n", __func__, address, pte_val(*pte));
+            if (fe->vma->vm_mm->using_smv) {
+                slog(KERN_INFO "[%s] addr 0x%16lx !pte_same, pte_val(*pte) 0x%16lx\n", __func__, fe->address, pte_val(*(fe->pte)));
+            }
             goto unlock;
         }
 	if (fe->flags & FAULT_FLAG_WRITE) {
             if (!pte_write(entry)) {
-                slog(KERN_INFO "[%s] addr 0x%16lx !pte_write, calling do_wp_page\n", __func__, address);
+                if (fe->vma->vm_mm->using_smv) {
+                    slog(KERN_INFO "[%s] addr 0x%16lx !pte_write, calling do_wp_page\n", __func__, fe->address);
+                }
                 return do_wp_page(fe, entry);
             }
 	    entry = pte_mkdirty(entry);
@@ -3617,7 +3629,7 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
 	 * Pthreads (smv_id == -1) should still use pgd_offset
 	 */
 	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
- 		pgd = pgd_offset_smv(mm, address, MAIN_THREAD);
+            pgd = pgd_offset_smv(mm, fe.address, MAIN_THREAD);
 	} else {
             pgd = pgd_offset(mm, address);
 	}
@@ -3675,7 +3687,7 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
             if (rv == 0) {
                 /* FIXME: just pass pte to copy_pgtable_smv? */
                 copy_pgtable_smv(current->smv_id, MAIN_THREAD,
-                                 address, flags, vma);
+                                 address, fe.flags, vma);
             }
 
             if (rv == 0) {
@@ -3686,7 +3698,7 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
             }
             if ( current->smv_id == MAIN_THREAD) {
                 slog(KERN_INFO "[%s] smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx\n",
-                     __func__, current->smv_id, pgd_val(*pgd), pud_val(*pud), pmd_val(*pmd));
+                     __func__, current->smv_id, pgd_val(*pgd), pud_val(*pud), pmd_val(*fe.pmd));
             }
             slog(KERN_INFO "[%s] cr3: 0x%16lx, smv %d: mm->pgd: %p, mm->pgd_smv[%d]: %p, mm->pgd_smv[MAIN_THREAD]: %p\n",
                  __func__, read_cr3(), current->smv_id, mm->pgd,

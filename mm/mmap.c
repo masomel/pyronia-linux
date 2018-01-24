@@ -2353,7 +2353,8 @@ static void unmap_region(struct mm_struct *mm,
 	if (mm->using_smv) {
             int smv_id = -1;
             do {
-                smv_id = find_next_bit(mm->smv_bitmapInUse, SMV_ARRAY_SIZE, (smv_id + 1) );
+                smv_id = find_next_bit(mm->smv_bitmapInUse,
+                                       SMV_ARRAY_SIZE, (smv_id + 1) );
                 if (smv_id != SMV_ARRAY_SIZE) {
                     slog(KERN_INFO "[%s] smv %d [0x%16lx to 0x%16lx]\n",
                          __func__, smv_id,
@@ -2365,15 +2366,14 @@ static void unmap_region(struct mm_struct *mm,
                        free_pgtables */
                     if (smv_id == MAIN_THREAD) {
                         free_pgtables(&tlb, vma,
-                          prev ? prev->vm_end : FIRST_USER_ADDRESS,
-                          next ? next->vm_start : USER_PGTABLES_CEILING);
+                                      prev ? prev->vm_end : FIRST_USER_ADDRESS,
+                                      next ? next->vm_start : USER_PGTABLES_CEILING);
                     }
-                    /* Other smv threads just free its own page
-                       tables */
+                    /* Other smv threads just free its own page tables */
                     else {
                         smv_free_pgtables(&tlb, vma,
-                           prev ? prev->vm_end : FIRST_USER_ADDRESS,
-                           next ? next->vm_start : USER_PGTABLES_CEILING);
+                                          prev ? prev->vm_end : FIRST_USER_ADDRESS,
+                                          next ? next->vm_start : USER_PGTABLES_CEILING);
                     }
                 }
             } while (smv_id != SMV_ARRAY_SIZE);
