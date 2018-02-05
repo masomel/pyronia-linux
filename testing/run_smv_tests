@@ -1,0 +1,10 @@
+#!/bin/bash
+
+SRCDIR=$HOME/libpyronia/libraries/libsmv/testcases
+
+gcc $SRCDIR/memdom_ops_tests.c -o $HOME/memdom_ops_test -lsmv
+cd $HOME
+
+echo "*** Running End-to-End Kernel Tests***"
+
+./memdom_ops_test
