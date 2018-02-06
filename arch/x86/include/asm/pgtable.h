@@ -720,10 +720,6 @@ static inline int pgd_none(pgd_t pgd)
  * pgd_index() is used get the offset into the pgd page's array of pgd_t's;
  */
 //#define pgd_offset(mm, address) ((mm)->pgd  + pgd_index((address)))
-#define pgd_offset(mm, address) \
-    ( ((mm)->using_smv && (current)->smv_id != -1) ?                    \
-      ((mm)->pgd_smv[(current)->smv_id] + pgd_index((address))) : ((mm)->pgd  + pgd_index((address))) )
-
 //pgd_t *pgd_offset(struct mm_struct*, unsigned long);
 
 #define pgd_offset(mm, address) \
