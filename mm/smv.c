@@ -29,7 +29,7 @@ int smv_main_init(void){
         printk(KERN_ERR "[%s] current task does not have mm\n", __func__);
         return -1;
     }
-    printk(KERN_INFO "[%s] ------------------ %s pid %d ------------------\n", __func__, current->comm, current->pid);
+    slog(KERN_INFO, "[%s] ------------------ %s pid %d ------------------\n", __func__, current->comm, current->pid);
     /* Mark this mm descriptor as using smv */
     mm->using_smv = 1;
 
@@ -65,7 +65,7 @@ int smv_create(void){
     /* SMP: protect shared smv bitmap */    
     mutex_lock(&mm->smv_metadataMutex);
 
-    slog(KERN_INFO "[%s] Before smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n", 
+    slog(KERN_INFO, "[%s] Before smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n", 
             __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
     /* Are we having too many smvs? */
     if( atomic_read(&mm->num_smvs) == SMV_ARRAY_SIZE ) {
@@ -97,7 +97,7 @@ int smv_create(void){
     /* Increase total number of smv count in mm_struct */
     atomic_inc(&mm->num_smvs);
 
-    slog(KERN_INFO "Created new smv with ID %d, #smvs: %d / %d\n", 
+    slog(KERN_INFO, "Created new smv with ID %d, #smvs: %d / %d\n", 
             smv_id, atomic_read(&mm->num_smvs), SMV_ARRAY_SIZE);
     goto out;
 
@@ -105,7 +105,7 @@ err:
     printk(KERN_ERR "Too many smvs, cannot create more.\n");
     smv_id = -1;
 out:
-    slog(KERN_INFO "[%s] After smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n", 
+    slog(KERN_INFO, "[%s] After smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n", 
             __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
 
     mutex_unlock(&mm->smv_metadataMutex);
@@ -133,7 +133,7 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     mutex_lock(&mm->smv_metadataMutex);
     smv = mm->smv_metadata[smv_id]; 
 
-    slog(KERN_INFO "[%s] killing smv metadata %p with ID %d\n", __func__, smv, smv_id);
+    slog(KERN_INFO, "[%s] killing smv metadata %p with ID %d\n", __func__, smv, smv_id);
     /* TODO: check if current task has the permission to delete the smv, only master thread can do this */
     
     /* Clear smv_id-th bit in mm's smv_bitmapInUse */
@@ -147,7 +147,7 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     }
 
     /* Clear all smv_bitmap(Read/Write/Execute/Allocate) bits for this smv in all memdoms */  
-    slog(KERN_INFO "[%s] leaving all the joined memdoms\n", __func__);
+    slog(KERN_INFO, "[%s] leaving all the joined memdoms\n", __func__);
     do {       
         mutex_lock(&smv->smv_mutex);
         memdom_id = find_first_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE);
@@ -164,7 +164,7 @@ int smv_kill(int smv_id, struct mm_struct *mm){
         pgd_free(mm, mm->pgd_smv[smv_id]);
         up_write(&mm->mmap_sem);
     } else{
-        slog(KERN_INFO "[%s] skip killing main thread's page tables. Will be done in exit_mmap()\n", __func__);
+        slog(KERN_INFO, "[%s] skip killing main thread's page tables. Will be done in exit_mmap()\n", __func__);
     }
     
     /* Free the actual smv struct */
@@ -176,7 +176,7 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     atomic_dec(&mm->num_smvs);
     mutex_unlock(&mm->smv_metadataMutex);
 
-    slog(KERN_INFO "[%s] Deleted smv with ID %d, #smvs: %d / %d\n", 
+    slog(KERN_INFO, "[%s] Deleted smv with ID %d, #smvs: %d / %d\n", 
             __func__, smv_id, atomic_read(&mm->num_smvs), SMV_ARRAY_SIZE);
 
     return 0;
@@ -188,7 +188,7 @@ void free_all_smvs(struct mm_struct *mm){
     int index = 0;
     while( atomic_read(&mm->num_smvs) > 0 ){
         index = find_first_bit(mm->smv_bitmapInUse, SMV_ARRAY_SIZE);
-        slog(KERN_INFO "[%s] killing smv %d, remaining #smvs: %d\n", __func__, index, atomic_read(&mm->num_smvs));
+        slog(KERN_INFO, "[%s] killing smv %d, remaining #smvs: %d\n", __func__, index, atomic_read(&mm->num_smvs));
         smv_kill(index, mm);
     }
 }
@@ -218,7 +218,7 @@ int smv_join_memdom(int memdom_id, int smv_id){
     set_bit(memdom_id, smv->memdom_bitmapJoin);
     mutex_unlock(&smv->smv_mutex);
 
-    slog(KERN_INFO "[%s] smv id %d joined memdom %d\n", __func__, smv_id, memdom_id);
+    slog(KERN_INFO, "[%s] smv id %d joined memdom %d\n", __func__, smv_id, memdom_id);
     return 0;
 }
 EXPORT_SYMBOL(smv_join_memdom);
@@ -233,7 +233,7 @@ int smv_leave_memdom(int memdom_id, int smv_id, struct mm_struct *mm){
         return -1;
     }
 
-    slog(KERN_INFO "[%s] smv %d leaving memdom %d\n", __func__, smv_id, memdom_id);
+    slog(KERN_INFO, "[%s] smv %d leaving memdom %d\n", __func__, smv_id, memdom_id);
 
     /* mm is not NULL is called by smv_kill() */
     if( mm == NULL ) {
@@ -249,7 +249,7 @@ int smv_leave_memdom(int memdom_id, int smv_id, struct mm_struct *mm){
         printk(KERN_ERR "[%s] memdom %p || smv %p not found\n", __func__, memdom, smv);
         return -1;
     }
-    slog(KERN_INFO "[%s] memdom %p, smv %p\n", __func__, memdom, smv);
+    slog(KERN_INFO, "[%s] memdom %p, smv %p\n", __func__, memdom, smv);
 
     /* Clear smv_id-th bit in the bitmap for memdom */
     mutex_lock(&memdom->memdom_mutex);
@@ -365,7 +365,7 @@ void smv_init(void){
     if( !smv_cachep ) {
         printk(KERN_ERR "[%s] smv slab initialization failed...\n", __func__);
     } else{
-        printk(KERN_INFO "[%s] smv slab initialized\n", __func__);
+        slog(KERN_INFO, "[%s] smv slab initialized\n", __func__);
     }
 }
 
@@ -396,7 +396,7 @@ pgd_t *smv_alloc_pgd(struct mm_struct *mm, int smv_id){
     /* Assign page table directory to mm_struct for smv_id */
     mm->pgd_smv[smv_id] = pgd;
 
-    slog(KERN_INFO "[%s] smv %d pgd %p\n", __func__, smv_id, mm->pgd_smv[smv_id]);
+    slog(KERN_INFO, "[%s] smv %d pgd %p\n", __func__, smv_id, mm->pgd_smv[smv_id]);
     return pgd;
 }
 
@@ -448,8 +448,8 @@ void smv_free_mmap(struct mm_struct *mm, int smv_id){
      * Question: should we shootdown TLB? 
      */
     else {
-        slog(KERN_INFO "[%s] Free pgtables for smv %d\n", __func__, smv_id);
-        slog(KERN_INFO "[%s] Before smv_free_mmap mm: %p, nr_pmds: %ld, nr_ptes: %ld\n", 
+        slog(KERN_INFO, "[%s] Free pgtables for smv %d\n", __func__, smv_id);
+        slog(KERN_INFO, "[%s] Before smv_free_mmap mm: %p, nr_pmds: %ld, nr_ptes: %ld\n", 
                 __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
         tlb_gather_mmu(&tlb, mm, 0, -1);
         update_hiwater_rss(mm);
@@ -465,7 +465,7 @@ void smv_free_mmap(struct mm_struct *mm, int smv_id){
         smv_free_pgtables(&tlb, vma, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);       
 
        	tlb_finish_mmu(&tlb, 0, -1);
-        slog(KERN_INFO "[%s] After smv_free_mmap mm: %p, nr_pmds: %ld, nr_ptes: %ld\n", 
+        slog(KERN_INFO, "[%s] After smv_free_mmap mm: %p, nr_pmds: %ld, nr_ptes: %ld\n", 
                 __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
     }
 }

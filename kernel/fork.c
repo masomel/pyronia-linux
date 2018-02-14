@@ -671,7 +671,7 @@ static void check_mm(struct mm_struct *mm)
 {
 	int i;
         if (mm->using_smv) {
-            slog(KERN_INFO "[%s] %s smv %d checking mm %p\n", __func__, current->comm, current->smv_id, mm);
+            slog(KERN_INFO, "[%s] %s smv %d checking mm %p\n", __func__, current->comm, current->smv_id, mm);
 	}
 
 	for (i = 0; i < NR_MM_COUNTERS; i++) {
@@ -717,7 +717,7 @@ struct mm_struct *mm_alloc(void)
 void __mmdrop(struct mm_struct *mm)
 {
     if (mm->using_smv) {
-        slog(KERN_INFO "[%s] %s in smv %d mm: %p\n", __func__, current->comm, current->smv_id, mm);
+        slog(KERN_INFO, "[%s] %s in smv %d mm: %p\n", __func__, current->comm, current->smv_id, mm);
     }
 	BUG_ON(mm == &init_mm);
 	mm_free_pgd(mm);
@@ -1859,7 +1859,7 @@ long _do_fork(unsigned long clone_flags,
            forking smv threads */
         if (current->mm) {
             if (current->mm->standby_smv_id != -1) {
-                slog(KERN_INFO "[%s] forked smv thread running in smv %d\n", __func__, current->mm->standby_smv_id);
+                slog(KERN_INFO, "[%s] forked smv thread running in smv %d\n", __func__, current->mm->standby_smv_id);
                 p->smv_id = current->mm->standby_smv_id;
                 current->mm->standby_smv_id = -1;
             }

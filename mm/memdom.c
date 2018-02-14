@@ -17,9 +17,9 @@ void memdom_init(void){
                                       sizeof(struct memdom_struct), 0,
                                       SLAB_HWCACHE_ALIGN | SLAB_NOTRACK, NULL);
     if( !memdom_cachep ) {
-        printk(KERN_INFO "[%s] memdom slabs initialization failed...\n", __func__);
+        slog(KERN_INFO, "[%s] memdom slabs initialization failed...\n", __func__);
     } else{
-        printk(KERN_INFO "[%s] memdom slabs initialized\n", __func__);
+        slog(KERN_INFO, "[%s] memdom slabs initialized\n", __func__);
     }
 }
 
@@ -61,7 +61,7 @@ int memdom_create(void){
     /* Increase total number of memdom count in mm_struct */
     atomic_inc(&mm->num_memdoms);
 
-    slog(KERN_INFO "Created new memdom with ID %d, #memdom: %d / %d\n", 
+    slog(KERN_INFO, "Created new memdom with ID %d, #memdom: %d / %d\n", 
             memdom_id, atomic_read(&mm->num_memdoms), SMV_ARRAY_SIZE);
     goto out;
 
@@ -155,7 +155,7 @@ int memdom_kill(int memdom_id, struct mm_struct *mm){
     atomic_dec(&mm->num_memdoms);
     mutex_unlock(&mm->smv_metadataMutex);
 
-    slog(KERN_INFO "[%s] Deleted memdom with ID %d, #memdoms: %d / %d\n", 
+    slog(KERN_INFO, "[%s] Deleted memdom with ID %d, #memdoms: %d / %d\n", 
             __func__, memdom_id, atomic_read(&mm->num_memdoms), SMV_ARRAY_SIZE);
 
     return 0;
@@ -167,7 +167,7 @@ void free_all_memdoms(struct mm_struct *mm){
     int index = 0;
     while( atomic_read(&mm->num_memdoms) > 0 ){
         index = find_first_bit(mm->memdom_bitmapInUse, SMV_ARRAY_SIZE);
-        slog(KERN_INFO "[%s] killing memdom %d, remaining #memdom: %d\n", __func__, index, atomic_read(&mm->num_memdoms));
+        slog(KERN_INFO, "[%s] killing memdom %d, remaining #memdom: %d\n", __func__, index, atomic_read(&mm->num_memdoms));
         memdom_kill(index, mm);
     }
 }
@@ -203,19 +203,19 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
     mutex_lock(&memdom->memdom_mutex);
     if( privs & MEMDOM_READ ) {
         set_bit(smv_id, memdom->smv_bitmapRead);
-        slog(KERN_INFO "[%s] Added read privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
+        slog(KERN_INFO, "[%s] Added read privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }
     if( privs & MEMDOM_WRITE ) {
         set_bit(smv_id, memdom->smv_bitmapWrite);
-        slog(KERN_INFO "[%s] Added write privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
+        slog(KERN_INFO, "[%s] Added write privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }
     if( privs & MEMDOM_EXECUTE ) {
         set_bit(smv_id, memdom->smv_bitmapExecute);
-        slog(KERN_INFO "[%s] Added execute privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
+        slog(KERN_INFO, "[%s] Added execute privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }
     if( privs & MEMDOM_ALLOCATE ) {
         set_bit(smv_id, memdom->smv_bitmapAllocate);
-        slog(KERN_INFO "[%s] Added allocate privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
+        slog(KERN_INFO, "[%s] Added allocate privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }    
     mutex_unlock(&memdom->memdom_mutex);     
      
@@ -254,19 +254,19 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
     mutex_lock(&memdom->memdom_mutex);
     if( privs & MEMDOM_READ ) {
         clear_bit(smv_id, memdom->smv_bitmapRead);
-        slog(KERN_INFO "[%s] Revoked read privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
+        slog(KERN_INFO, "[%s] Revoked read privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }
     if( privs & MEMDOM_WRITE ) {
         clear_bit(smv_id, memdom->smv_bitmapWrite);
-        slog(KERN_INFO "[%s] Revoked write privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
+        slog(KERN_INFO, "[%s] Revoked write privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }
     if( privs & MEMDOM_EXECUTE ) {
         clear_bit(smv_id, memdom->smv_bitmapExecute);
-        slog(KERN_INFO "[%s] Revoked execute privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
+        slog(KERN_INFO, "[%s] Revoked execute privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }
     if( privs & MEMDOM_ALLOCATE ) {
         clear_bit(smv_id, memdom->smv_bitmapAllocate);
-        slog(KERN_INFO "[%s] Revoked allocate privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
+        slog(KERN_INFO, "[%s] Revoked allocate privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }            
     mutex_unlock(&memdom->memdom_mutex);
 
@@ -318,7 +318,7 @@ int memdom_priv_get(int memdom_id, int smv_id){
     }
     mutex_unlock(&memdom->memdom_mutex);
 
-    slog(KERN_INFO "[%s] smv %d has privs %x in memdom %d\n", __func__, smv_id, privs, memdom_id);
+    slog(KERN_INFO, "[%s] smv %d has privs %x in memdom %d\n", __func__, smv_id, privs, memdom_id);
     return privs;
 }
 EXPORT_SYMBOL(memdom_priv_get);
@@ -381,7 +381,7 @@ int memdom_claim_all_vmas(int memdom_id){
     }
    	up_write(&mm->mmap_sem);
 
-    slog(KERN_INFO "[%s] Initialized %d vmas to be in memdom %d\n", __func__, vma_count, memdom_id);
+    slog(KERN_INFO, "[%s] Initialized %d vmas to be in memdom %d\n", __func__, vma_count, memdom_id);
     return 0;
 }
 
@@ -395,7 +395,7 @@ int memdom_query_id(unsigned long addr){
     vma = find_vma(current->mm, addr);
     if( !vma ) {
         /* Debugging info, should remove printk to avoid information leakage and just go to out label. */
-        printk(KERN_INFO "[%s] addr 0x%16lx is not in any memdom\n", __func__, addr);
+        slog(KERN_INFO, "[%s] addr 0x%16lx is not in any memdom\n", __func__, addr);
         goto out;    
     }
 
@@ -403,7 +403,7 @@ int memdom_query_id(unsigned long addr){
     smv_id = current->smv_id;
     memdom_id = vma->memdom_id;
     if( smv_is_in_memdom(memdom_id, smv_id) ) {
-        printk(KERN_INFO "[%s] addr 0x%16lx is in memdom %d\n", __func__, addr, memdom_id);        
+        slog(KERN_INFO, "[%s] addr 0x%16lx is in memdom %d\n", __func__, addr, memdom_id);        
     } else {
         /* Debugging info, should remove to avoid information leakage, just set memdom_id to 0 (lying to the caller)*/
         printk(KERN_ERR "[%s] hey you don't have the privilege to query this address (smv %d, memdom %d)\n", 

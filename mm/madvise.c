@@ -485,7 +485,7 @@ static long madvise_dontneed(struct vm_area_struct *vma,
         do {
             zap.smv_id = find_next_bit(mm->smv_bitmapInUse, SMV_ARRAY_SIZE, (zap.smv_id+1));
             if (zap.smv_id != SMV_ARRAY_SIZE) {
-                slog(KERN_INFO "[%s] smv %d [0x%16lx to 0x%16lx]\n", __func__, zap.smv_id, start, end);
+                slog(KERN_INFO, "[%s] smv %d [0x%16lx to 0x%16lx]\n", __func__, zap.smv_id, start, end);
                 zap_page_range(vma, start, end - start, &zap);
             }
         } while (zap.smv_id != SMV_ARRAY_SIZE);

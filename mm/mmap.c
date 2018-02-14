@@ -972,11 +972,11 @@ struct vm_area_struct *vma_merge(struct mm_struct *mm,
 	if ( vm_flags & VM_MEMDOM ||
              (prev && (prev->vm_flags & VM_MEMDOM)) ||
              (next && (next->vm_flags & VM_MEMDOM))) {
-            printk(KERN_INFO "[%s] smv %d skip merging VM_MEMDOM vma\n", __func__, current->smv_id);
-            printk(KERN_INFO "[%s] smv %d prev->vm_start: 0x%16lx to prev->vm_end: 0x%16lx, prev->memdom_id: %d\n",
+            slog(KERN_INFO, "[%s] smv %d skip merging VM_MEMDOM vma\n", __func__, current->smv_id);
+            slog(KERN_INFO, "[%s] smv %d prev->vm_start: 0x%16lx to prev->vm_end: 0x%16lx, prev->memdom_id: %d\n",
                    __func__, current->smv_id, prev->vm_start,
                    prev->vm_end, prev->memdom_id);
-            printk(KERN_INFO "[%s] smv %d next->vm_start: 0x%16lx to next->vm_end: 0x%16lx, next->memdom_id: %d\n",
+            slog(KERN_INFO, "[%s] smv %d next->vm_start: 0x%16lx to next->vm_end: 0x%16lx, next->memdom_id: %d\n",
                    __func__, current->smv_id, next->vm_start,
                    next->vm_end, next->memdom_id);
             return NULL;
@@ -1336,7 +1336,7 @@ SYSCALL_DEFINE6(mmap_pgoff, unsigned long, addr, unsigned long, len,
 	unsigned long retval;
 
         if (current->mm->using_smv) {
-            //slog(KERN_INFO "[%s] addr: %lx, len: %lx, prot: %lx, flags: %lx\n", __func__, addr, len, prot, flags);
+            //slog(KERN_INFO, "[%s] addr: %lx, len: %lx, prot: %lx, flags: %lx\n", __func__, addr, len, prot, flags);
 	}
 
 	if (!(flags & MAP_ANONYMOUS)) {
@@ -1533,7 +1533,7 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
         if ( vm_flags & VM_MEMDOM ) {
             vma->memdom_id = current->mmap_memdom_id;
             current->mmap_memdom_id = -1; // reset to -1
-            printk(KERN_INFO "[%s] smv %d allocated vma in memdom %d [0x%16lx - 0x%16lx)\n",
+            slog(KERN_INFO, "[%s] smv %d allocated vma in memdom %d [0x%16lx - 0x%16lx)\n",
                    __func__, current->smv_id, vma->memdom_id,
                    vma->vm_start, vma->vm_end);
 	}
@@ -2356,7 +2356,7 @@ static void unmap_region(struct mm_struct *mm,
                 smv_id = find_next_bit(mm->smv_bitmapInUse,
                                        SMV_ARRAY_SIZE, (smv_id + 1) );
                 if (smv_id != SMV_ARRAY_SIZE) {
-                    slog(KERN_INFO "[%s] smv %d [0x%16lx to 0x%16lx]\n",
+                    slog(KERN_INFO, "[%s] smv %d [0x%16lx to 0x%16lx]\n",
                          __func__, smv_id,
                          prev ? prev->vm_end : FIRST_USER_ADDRESS,
                          next ? next->vm_start : USER_PGTABLES_CEILING );
@@ -2578,7 +2578,7 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
 	}
 
         if (vma->memdom_id != MAIN_THREAD) {
-            printk(KERN_INFO "[%s] smv %d removing vma in memdom %d\n", __func__, current->smv_id, vma->memdom_id);
+            slog(KERN_INFO, "[%s] smv %d removing vma in memdom %d\n", __func__, current->smv_id, vma->memdom_id);
 	}
 
 	/*
@@ -2847,7 +2847,7 @@ void exit_mmap(struct mm_struct *mm)
 	unsigned long nr_accounted = 0;
 
         if (mm->using_smv) {
-            slog(KERN_INFO "[%s] %s in smv %d mm: %p\n", __func__, current->comm, current->smv_id, mm);
+            slog(KERN_INFO, "[%s] %s in smv %d mm: %p\n", __func__, current->comm, current->smv_id, mm);
 	}
 
 	/* mm's last user has gone, and its about to be pulled down */

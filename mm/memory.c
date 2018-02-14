@@ -3172,6 +3172,8 @@ static int do_fault_around(struct fault_env *fe, pgoff_t start_pgoff)
 	/* Huge page is mapped? Page fault is solved */
 	if (pmd_trans_huge(*fe->pmd)) {
 		ret = VM_FAULT_NOPAGE;
+		if (fe->vma->vm_mm->using_smv)
+		  slog(KERN_INFO, "[%s] huge page is mapped: addr 0x%16lx\n", __func__, fe->address);
 		goto out;
 	}
 
@@ -3181,8 +3183,11 @@ static int do_fault_around(struct fault_env *fe, pgoff_t start_pgoff)
 
 	/* check if the page fault is solved */
 	fe->pte -= (fe->address >> PAGE_SHIFT) - (address >> PAGE_SHIFT);
-	if (!pte_none(*fe->pte))
+	if (!pte_none(*fe->pte)) {
 		ret = VM_FAULT_NOPAGE;
+		if (fe->vma->vm_mm->using_smv)
+		  slog(KERN_INFO, "[%s] page fault solved: addr 0x%16lx\n", __func__, fe->address);
+	}
 	pte_unmap_unlock(fe->pte, fe->ptl);
 out:
 	fe->address = address;
@@ -3208,15 +3213,20 @@ static int do_read_fault(struct fault_env *fe, pgoff_t pgoff)
 	}
 
 	ret = __do_fault(fe, pgoff, NULL, &fault_page, NULL);
-	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
-		return ret;
-
+	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY))) {
+	  if (vma->vm_mm->using_smv)
+	    slog(KERN_INFO, "[%s] __do_fault returned %d: addr 0x%16lx\n", __func__, ret, fe->address);
+	  return ret;
+	}
+	
 	ret |= alloc_set_pte(fe, NULL, fault_page);
 	if (fe->pte)
 		pte_unmap_unlock(fe->pte, fe->ptl);
 	unlock_page(fault_page);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
 		put_page(fault_page);
+	if (ret && fe->vma->vm_mm->using_smv)
+	  slog(KERN_INFO, "[%s] after alloc_set_pte %d: addr 0x%16lx\n", __func__, ret, fe->address);
 	return ret;
 }
 
@@ -3339,12 +3349,23 @@ static int do_fault(struct fault_env *fe)
 	pgoff_t pgoff = linear_page_index(vma, fe->address);
 
 	/* The VMA was not fully populated on mmap() or missing VM_DONTEXPAND */
-	if (!vma->vm_ops->fault)
-		return VM_FAULT_SIGBUS;
-	if (!(fe->flags & FAULT_FLAG_WRITE))
-		return do_read_fault(fe, pgoff);
-	if (!(vma->vm_flags & VM_SHARED))
-		return do_cow_fault(fe, pgoff);
+	if (!vma->vm_ops->fault) {
+	  if (vma->vm_mm->using_smv)
+	    slog(KERN_INFO, "[%s] VMA was not fully populated: addr 0x%16lx\n", __func__, fe->address);
+	  return VM_FAULT_SIGBUS;
+	}
+	if (!(fe->flags & FAULT_FLAG_WRITE)) {
+	  if (vma->vm_mm->using_smv)
+	    slog(KERN_INFO, "[%s] read fault: addr 0x%16lx\n", __func__, fe->address);
+	  return do_read_fault(fe, pgoff);
+	}
+	if (!(vma->vm_flags & VM_SHARED)) {
+	  if (vma->vm_mm->using_smv)
+	    slog(KERN_INFO, "[%s] cow fault: addr 0x%16lx\n", __func__, fe->address);
+	  return do_cow_fault(fe, pgoff);
+	}
+	if (vma->vm_mm->using_smv)
+	  slog(KERN_INFO, "[%s] shared fault: addr 0x%16lx\n", __func__, fe->address);
 	return do_shared_fault(fe, pgoff);
 }
 
@@ -3510,6 +3531,8 @@ static int handle_pte_fault(struct fault_env *fe)
 		 * concurrent faults and from rmap lookups.
 		 */
 		fe->pte = NULL;
+		if (fe->vma->vm_mm->using_smv)
+		  slog(KERN_INFO, "[%s] fe->pmd is probably not none: addr 0x%16lx\n", __func__, fe->address);
 	} else {
 		/* See comment in pte_alloc_one_map() */
 		if (pmd_trans_unstable(fe->pmd) || pmd_devmap(*fe->pmd))
@@ -3536,35 +3559,38 @@ static int handle_pte_fault(struct fault_env *fe)
 		if (pte_none(entry)) {
 			pte_unmap(fe->pte);
 			fe->pte = NULL;
+			if (fe->vma->vm_mm->using_smv)
+			  slog(KERN_INFO, "[%s] entry is none: addr 0x%16lx\n", __func__, fe->address);
+
 		}
 	}
 
 	if (!fe->pte) {
             if (vma_is_anonymous(fe->vma)) {
                 if (fe->vma->vm_mm->using_smv) {
-                    slog(KERN_INFO "[%s] addr 0x%16lx !fe->pte, calling do_anonymous_page\n", __func__, fe->address);
+                    slog(KERN_INFO, "[%s] addr 0x%16lx !fe->pte, calling do_anonymous_page\n", __func__, fe->address);
                 }
                 return do_anonymous_page(fe);
             }
             else {
                  if (fe->vma->vm_mm->using_smv) {
-                     slog(KERN_INFO "[%s] addr 0x%16lx !fe->pte, calling do_fault\n", __func__, fe->address);
+                     slog(KERN_INFO, "[%s] addr 0x%16lx !fe->pte, calling do_fault\n", __func__, fe->address);
                  }
-                return do_fault(fe);
+		 return do_fault(fe);
             }
 	}
 
 	if (!pte_present(entry)) {
              if (fe->vma->vm_mm->using_smv) {
-                 slog(KERN_INFO "[%s] addr 0x%16lx not present\n", __func__, fe->address);
-                 slog(KERN_INFO "[%s] addr 0x%16lx, calling do_swap_page\n", __func__, fe->address);
+                 slog(KERN_INFO, "[%s] addr 0x%16lx not present\n", __func__, fe->address);
+                 slog(KERN_INFO, "[%s] addr 0x%16lx, calling do_swap_page\n", __func__, fe->address);
              }
              return do_swap_page(fe, entry);
         }
 
 	if (pte_protnone(entry) && vma_is_accessible(fe->vma)) {
             if (fe->vma->vm_mm->using_smv) {
-                slog(KERN_INFO "[%s] addr 0x%16lx pte_protnone, calling do_numa_page\n", __func__, fe->address);
+                slog(KERN_INFO, "[%s] addr 0x%16lx pte_protnone, calling do_numa_page\n", __func__, fe->address);
             }
             return do_numa_page(fe, entry);
         }
@@ -3573,14 +3599,14 @@ static int handle_pte_fault(struct fault_env *fe)
 	spin_lock(fe->ptl);
 	if (unlikely(!pte_same(*fe->pte, entry))) {
             if (fe->vma->vm_mm->using_smv) {
-                slog(KERN_INFO "[%s] addr 0x%16lx !pte_same, pte_val(*pte) 0x%16lx\n", __func__, fe->address, pte_val(*(fe->pte)));
+                slog(KERN_INFO, "[%s] addr 0x%16lx !pte_same, pte_val(*pte) 0x%16lx\n", __func__, fe->address, pte_val(*(fe->pte)));
             }
             goto unlock;
         }
 	if (fe->flags & FAULT_FLAG_WRITE) {
             if (!pte_write(entry)) {
                 if (fe->vma->vm_mm->using_smv) {
-                    slog(KERN_INFO "[%s] addr 0x%16lx !pte_write, calling do_wp_page\n", __func__, fe->address);
+                    slog(KERN_INFO, "[%s] addr 0x%16lx !pte_write, calling do_wp_page\n", __func__, fe->address);
                 }
                 return do_wp_page(fe, entry);
             }
@@ -3682,25 +3708,26 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
 	 */
 	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
             /* Only copy page table to current smv if
-               handle_pte_fault succeeds. MAIN_THREAD will return
+               handle_pte_fault succeeds (this includes a page fault
+	       where the pte was allocated). MAIN_THREAD will return
                immediately as it doesn't have to copy its own pgtables. */
-            if (rv == 0) {
+            if (rv == 0 || rv == VM_FAULT_NOPAGE) {
                 /* FIXME: just pass pte to copy_pgtable_smv? */
                 copy_pgtable_smv(current->smv_id, MAIN_THREAD,
                                  address, fe.flags, vma);
             }
 
-            if (rv == 0) {
-                slog(KERN_INFO "[%s] addr 0x%16lx done\n", __func__, address);
+            if (rv == 0 || rv == VM_FAULT_NOPAGE) {
+                slog(KERN_INFO, "[%s] addr 0x%16lx done\n", __func__, address);
             }
             else {
-                slog(KERN_INFO "[%s] addr 0x%16lx failed\n", __func__, address);
+                slog(KERN_INFO, "[%s] addr 0x%16lx failed\n", __func__, address);
             }
             if ( current->smv_id == MAIN_THREAD) {
-                slog(KERN_INFO "[%s] smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx\n",
+                slog(KERN_INFO, "[%s] smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx\n",
                      __func__, current->smv_id, pgd_val(*pgd), pud_val(*pud), pmd_val(*fe.pmd));
             }
-            slog(KERN_INFO "[%s] cr3: 0x%16lx, smv %d: mm->pgd: %p, mm->pgd_smv[%d]: %p, mm->pgd_smv[MAIN_THREAD]: %p\n",
+            slog(KERN_INFO, "[%s] cr3: 0x%16lx, smv %d: mm->pgd: %p, mm->pgd_smv[%d]: %p, mm->pgd_smv[MAIN_THREAD]: %p\n",
                  __func__, read_cr3(), current->smv_id, mm->pgd,
                  current->smv_id, mm->pgd_smv[current->smv_id],
                  mm->pgd_smv[MAIN_THREAD]);

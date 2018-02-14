@@ -1190,9 +1190,9 @@ static noinline void fault_info(unsigned long addr, struct vm_area_struct *vma, 
         return;
     }
 
-    slog(KERN_INFO "\n-- [%s] pid %d smv %d page fault at 0x%16lx, page_aligned_addr: 0x%16lx, vma->memdom_id: %d--\n",
+    slog(KERN_INFO, "\n-- [%s] pid %d smv %d page fault at 0x%16lx, page_aligned_addr: 0x%16lx, vma->memdom_id: %d--\n",
          __func__, tsk->pid, tsk->smv_id, addr, page_aligned_addr, vma->memdom_id);
-    slog(KERN_INFO "-- [%s] prot: %d, write: %d, user: %d, rsvd: %d, instr_code: %d, vma->memdom_id: %d --\n",
+    slog(KERN_INFO, "-- [%s] prot: %d, write: %d, user: %d, rsvd: %d, instr_code: %d, vma->memdom_id: %d --\n",
          __func__, prot_code, write_code, user_code, rsvd_code, instr_code, vma->memdom_id);
 
     /* Prevent printing recurring fault info */
@@ -1405,7 +1405,7 @@ good_area:
             printk(KERN_ERR "[%s] prot: %d, write: %d, user: %d, rsvd: %d, instr_code: %d\n",
                    __func__, prot_code, write_code, user_code, rsvd_code, instr_code);
 
-            mm->mmap;
+            walk = mm->mmap;
             while (walk) {
                 printk(KERN_ERR "[%s] vma->vm_start: 0x%16lx to vma->vm_end: 0x%16lx, vma->memdom_id: %d\n",
                        __func__, walk->vm_start, walk->vm_end, walk->memdom_id);

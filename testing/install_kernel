@@ -4,6 +4,8 @@ KERNEL_SRC=/home/pyronia/pyronia-linux
 BUILD=/home/pyronia/build/kernel
 
 cd $KERNEL_SRC
+make O=$BUILD ARCH=x86_64 menuconfig
+
 echo "===================== [x64-kernel] Compiling kernel image.  ====================="
 make O=$BUILD ARCH=x86_64;
 if [ $? -eq 0 ]; then
