@@ -283,12 +283,23 @@ void tlb_finish_mmu(struct mmu_gather *tlb, unsigned long start, unsigned long e
 
 	tlb_flush_mmu(tlb);
 
+        if (tlb->mm->using_smv)
+            slog(KERN_INFO, "[%s] flushed tlb mmu for smv %d\n",
+                 __func__, tlb->smv_id);
+
 	/* keep the page table cache within bounds */
 	check_pgt_cache();
+
+        if (tlb->mm->using_smv)
+            slog(KERN_INFO, "[%s] pgt cache checked for smv %d\n",
+                 __func__, tlb->smv_id);
 
 	for (batch = tlb->local.next; batch; batch = next) {
 		next = batch->next;
 		free_pages((unsigned long)batch, 0);
+                if (tlb->mm->using_smv)
+                     slog(KERN_INFO, "[%s] freed page batch at 0x%16lx for smv %d\n",
+                          __func__, (unsinged long)batch, tlb->smv_id);
 	}
 	tlb->local.next = NULL;
 }
@@ -1303,14 +1314,14 @@ void unmap_page_range(struct mmu_gather *tlb,
 	unsigned long next;
 
         if (addr >= end)
-             slog(KERN_INFO, "[%s] start is greater than end: %lu - %lu\n",
+             slog(KERN_INFO, "[%s] start is greater than end: [0x%16lx to 0x%16lx]\n",
                   __func__, addr, end);
 
 	BUG_ON(addr >= end);
 	tlb_start_vma(tlb, vma);
 	if ( tlb->mm->using_smv ) {
             mutex_lock(&tlb->mm->smv_metadataMutex);
-            slog(KERN_INFO, "[%s] %lu - %lu for smv %d\n",
+            slog(KERN_INFO, "[%s] [0x%16lx to 0x%16lx] for smv %d\n",
                  __func__, addr, end, tlb->smv_id);
             pgd = tlb->mm->pgd_smv[tlb->smv_id] + pgd_index(addr);
             mutex_unlock(&tlb->mm->smv_metadataMutex);
