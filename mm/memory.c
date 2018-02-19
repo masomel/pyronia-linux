@@ -1306,6 +1306,8 @@ void unmap_page_range(struct mmu_gather *tlb,
 	tlb_start_vma(tlb, vma);
 	if ( tlb->mm->using_smv ) {
             mutex_lock(&tlb->mm->smv_metadataMutex);
+            slog(KERN_INFO, "[%s] unmapping page range: %lu - %lu for smv %d\n",
+                 __func__, addr, end, tlb->smv_id);
             pgd = tlb->mm->pgd_smv[tlb->smv_id] + pgd_index(addr);
             mutex_unlock(&tlb->mm->smv_metadataMutex);
 	} else{
