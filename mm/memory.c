@@ -299,7 +299,7 @@ void tlb_finish_mmu(struct mmu_gather *tlb, unsigned long start, unsigned long e
 		free_pages((unsigned long)batch, 0);
                 if (tlb->mm->using_smv)
                      slog(KERN_INFO, "[%s] freed page batch at 0x%16lx for smv %d\n",
-                          __func__, (unsinged long)batch, tlb->smv_id);
+                          __func__, (unsigned long)batch, tlb->smv_id);
 	}
 	tlb->local.next = NULL;
 }
@@ -1184,6 +1184,8 @@ again:
 					if (unlikely(details && details->ignore_dirty))
 						continue;
 					force_flush = 1;
+					if (mm->using_smv)
+					  slog(KERN_INFO, "[%s] setting page 0x%16lx dirty\n", __func__, &page);
 					set_page_dirty(page);
 				}
 				if (pte_young(ptent) &&

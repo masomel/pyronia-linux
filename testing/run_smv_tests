@@ -2,15 +2,15 @@
 
 SRCDIR=$HOME/libpyronia/libraries/libsmv/testcases
 
-gcc -g $SRCDIR/memdom_ops_tests.c -o $HOME/memdom_ops_test -lsmv
-gcc -g $SRCDIR/memdom_fault_tests.c -o $HOME/memdom_fault_test -lsmv
-gcc -g $SRCDIR/smv_ops_tests.c -o $HOME/smv_ops_test -lsmv
-#gcc -g $SRCDIR/smvthread_ops_tests.c -o $HOME/smvthread_ops_test -lsmv -pthread
+#gcc -g $SRCDIR/memdom_ops_tests.c -o $HOME/memdom_ops_test -lsmv
+#gcc -g $SRCDIR/memdom_fault_tests.c -o $HOME/memdom_fault_test -lsmv
+#gcc -g $SRCDIR/smv_ops_tests.c -o $HOME/smv_ops_test -lsmv
+gcc -g $SRCDIR/smvthread_ops_tests.c -o $HOME/smvthread_ops_test -lsmv -pthread
 cd $HOME
 
 echo "*** Running End-to-End Kernel Tests***"
 
-./memdom_ops_test
-./memdom_fault_test
-./smv_ops_test
-#./smvthread_ops_test
+#./memdom_ops_test
+#./memdom_fault_test
+#./smv_ops_test
+./smvthread_ops_test

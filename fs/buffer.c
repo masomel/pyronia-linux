@@ -629,6 +629,9 @@ static void __set_page_dirty(struct page *page, struct address_space *mapping,
 {
 	unsigned long flags;
 
+	if (!&mapping->tree_lock)
+	  slog(KERN_ERR, "[%s] null mapping lock\n", __func__);
+	  
 	spin_lock_irqsave(&mapping->tree_lock, flags);
 	if (page->mapping) {	/* Race with truncate? */
 		WARN_ON_ONCE(warn && !PageUptodate(page));
