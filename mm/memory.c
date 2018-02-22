@@ -1193,7 +1193,11 @@ again:
 					mark_page_accessed(page);
 			}
 			rss[mm_counter(page)]--;
+                        if (mm->using_smv)
+                            slog(KERN_INFO, "[%s] page 0x%16lx, mapcount before rmap removal: %d\n", __func__, page, &page->_mapcount);
 			page_remove_rmap(page, false);
+                        if (mm->using_smv)
+                            slog(KERN_INFO, "[%s] page 0x%16lx, mapcount after: %d\n", __func__, page, &page->_mapcount);
 			if (unlikely(page_mapcount(page) < 0))
 				print_bad_pte(vma, addr, ptent, page);
 			if (unlikely(__tlb_remove_page(tlb, page))) {
@@ -2859,7 +2863,11 @@ static int do_anonymous_page(struct fault_env *fe)
 	}
 
 	inc_mm_counter_fast(vma->vm_mm, MM_ANONPAGES);
+        if (vma->vm_mm->using_smv)
+            slog(KERN_INFO, "[%s] page 0x%16lx, mapcount before new mapping: %d\n", __func__, page, &page->_mapcount);
 	page_add_new_anon_rmap(page, vma, fe->address, false);
+        if (vma->vm_mm->using_smv)
+            slog(KERN_INFO, "[%s] page 0x%16lx, mapcount after: %d\n", __func__, page, &page->_mapcount);
 	mem_cgroup_commit_charge(page, memcg, false, false);
 	lru_cache_add_active_or_unevictable(page, vma);
 setpte:
