@@ -14,8 +14,6 @@
 #include <asm/uv/uv.h>
 #include <linux/debugfs.h>
 
-#include <linux/smv.h>
-
 /*
  *	Smarter SMP flushing macros.
  *		c/o Linus Torvalds.
@@ -114,7 +112,6 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 *
 		 */
                 if (next->using_smv && tsk->smv_id != MAIN_THREAD) {
-		  //slog(KERN_INFO, "[%s] re-loading page table for smv %d\n", __func__, tsk->smv_id);
                     load_cr3(next->pgd_smv[tsk->smv_id]);
                 }
                 else {
@@ -172,7 +169,6 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			 * fills with respect to the mm_cpumask write.
 			 */
                         if (next->using_smv && tsk->smv_id != MAIN_THREAD) {
-			  //slog(KERN_INFO, "[%s] loading page table for smv %d\n", __func__, tsk->smv_id);
                             load_cr3(next->pgd_smv[tsk->smv_id]);
                         }
                         else {

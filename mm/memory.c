@@ -283,23 +283,12 @@ void tlb_finish_mmu(struct mmu_gather *tlb, unsigned long start, unsigned long e
 
 	tlb_flush_mmu(tlb);
 
-        if (tlb->mm->using_smv)
-            slog(KERN_INFO, "[%s] flushed tlb mmu for smv %d\n",
-                 __func__, tlb->smv_id);
-
 	/* keep the page table cache within bounds */
 	check_pgt_cache();
-
-        if (tlb->mm->using_smv)
-            slog(KERN_INFO, "[%s] pgt cache checked for smv %d\n",
-                 __func__, tlb->smv_id);
 
 	for (batch = tlb->local.next; batch; batch = next) {
 		next = batch->next;
 		free_pages((unsigned long)batch, 0);
-                if (tlb->mm->using_smv)
-                     slog(KERN_INFO, "[%s] freed page batch at 0x%16lx for smv %d\n",
-                          __func__, (unsigned long)batch, tlb->smv_id);
 	}
 	tlb->local.next = NULL;
 }
@@ -1184,8 +1173,6 @@ again:
 					if (unlikely(details && details->ignore_dirty))
 						continue;
 					force_flush = 1;
-					if (mm->using_smv)
-					  slog(KERN_INFO, "[%s] setting page 0x%16lx dirty\n", __func__, &page);
 					set_page_dirty(page);
 				}
 				if (pte_young(ptent) &&
@@ -1193,11 +1180,7 @@ again:
 					mark_page_accessed(page);
 			}
 			rss[mm_counter(page)]--;
-                        if (mm->using_smv)
-                            slog(KERN_INFO, "[%s] page 0x%16lx, mapcount before rmap removal: %d\n", __func__, page, &page->_mapcount);
 			page_remove_rmap(page, false);
-                        if (mm->using_smv)
-                            slog(KERN_INFO, "[%s] page 0x%16lx, mapcount after: %d\n", __func__, page, &page->_mapcount);
 			if (unlikely(page_mapcount(page) < 0))
 				print_bad_pte(vma, addr, ptent, page);
 			if (unlikely(__tlb_remove_page(tlb, page))) {
@@ -1319,16 +1302,10 @@ void unmap_page_range(struct mmu_gather *tlb,
 	pgd_t *pgd;
 	unsigned long next;
 
-        if (addr >= end)
-             slog(KERN_INFO, "[%s] start is greater than end: [0x%16lx to 0x%16lx]\n",
-                  __func__, addr, end);
-
 	BUG_ON(addr >= end);
 	tlb_start_vma(tlb, vma);
 	if ( tlb->mm->using_smv ) {
             mutex_lock(&tlb->mm->smv_metadataMutex);
-            slog(KERN_INFO, "[%s] [0x%16lx to 0x%16lx] for smv %d\n",
-                 __func__, addr, end, tlb->smv_id);
             pgd = tlb->mm->pgd_smv[tlb->smv_id] + pgd_index(addr);
             mutex_unlock(&tlb->mm->smv_metadataMutex);
 	} else{
@@ -2863,11 +2840,7 @@ static int do_anonymous_page(struct fault_env *fe)
 	}
 
 	inc_mm_counter_fast(vma->vm_mm, MM_ANONPAGES);
-        if (vma->vm_mm->using_smv)
-            slog(KERN_INFO, "[%s] page 0x%16lx, mapcount before new mapping: %d\n", __func__, page, &page->_mapcount);
 	page_add_new_anon_rmap(page, vma, fe->address, false);
-        if (vma->vm_mm->using_smv)
-            slog(KERN_INFO, "[%s] page 0x%16lx, mapcount after: %d\n", __func__, page, &page->_mapcount);
 	mem_cgroup_commit_charge(page, memcg, false, false);
 	lru_cache_add_active_or_unevictable(page, vma);
 setpte:
@@ -3199,8 +3172,6 @@ static int do_fault_around(struct fault_env *fe, pgoff_t start_pgoff)
 	/* Huge page is mapped? Page fault is solved */
 	if (pmd_trans_huge(*fe->pmd)) {
 		ret = VM_FAULT_NOPAGE;
-		if (fe->vma->vm_mm->using_smv)
-		  slog(KERN_INFO, "[%s] huge page is mapped: addr 0x%16lx\n", __func__, fe->address);
 		goto out;
 	}
 
@@ -3211,9 +3182,7 @@ static int do_fault_around(struct fault_env *fe, pgoff_t start_pgoff)
 	/* check if the page fault is solved */
 	fe->pte -= (fe->address >> PAGE_SHIFT) - (address >> PAGE_SHIFT);
 	if (!pte_none(*fe->pte)) {
-		ret = VM_FAULT_NOPAGE;
-		if (fe->vma->vm_mm->using_smv)
-		  slog(KERN_INFO, "[%s] page fault solved: addr 0x%16lx\n", __func__, fe->address);
+	  ret = VM_FAULT_NOPAGE;
 	}
 	pte_unmap_unlock(fe->pte, fe->ptl);
 out:
@@ -3241,8 +3210,6 @@ static int do_read_fault(struct fault_env *fe, pgoff_t pgoff)
 
 	ret = __do_fault(fe, pgoff, NULL, &fault_page, NULL);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY))) {
-	  if (vma->vm_mm->using_smv)
-	    slog(KERN_INFO, "[%s] __do_fault returned %d: addr 0x%16lx\n", __func__, ret, fe->address);
 	  return ret;
 	}
 	
@@ -3251,9 +3218,7 @@ static int do_read_fault(struct fault_env *fe, pgoff_t pgoff)
 		pte_unmap_unlock(fe->pte, fe->ptl);
 	unlock_page(fault_page);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
-		put_page(fault_page);
-	if (ret && fe->vma->vm_mm->using_smv)
-	  slog(KERN_INFO, "[%s] after alloc_set_pte %d: addr 0x%16lx\n", __func__, ret, fe->address);
+	  put_page(fault_page);
 	return ret;
 }
 
@@ -3377,22 +3342,14 @@ static int do_fault(struct fault_env *fe)
 
 	/* The VMA was not fully populated on mmap() or missing VM_DONTEXPAND */
 	if (!vma->vm_ops->fault) {
-	  if (vma->vm_mm->using_smv)
-	    slog(KERN_INFO, "[%s] VMA was not fully populated: addr 0x%16lx\n", __func__, fe->address);
 	  return VM_FAULT_SIGBUS;
 	}
 	if (!(fe->flags & FAULT_FLAG_WRITE)) {
-	  if (vma->vm_mm->using_smv)
-	    slog(KERN_INFO, "[%s] read fault: addr 0x%16lx\n", __func__, fe->address);
 	  return do_read_fault(fe, pgoff);
 	}
 	if (!(vma->vm_flags & VM_SHARED)) {
-	  if (vma->vm_mm->using_smv)
-	    slog(KERN_INFO, "[%s] cow fault: addr 0x%16lx\n", __func__, fe->address);
 	  return do_cow_fault(fe, pgoff);
 	}
-	if (vma->vm_mm->using_smv)
-	  slog(KERN_INFO, "[%s] shared fault: addr 0x%16lx\n", __func__, fe->address);
 	return do_shared_fault(fe, pgoff);
 }
 
