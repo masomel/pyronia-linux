@@ -167,7 +167,7 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
         if ( page ) {
             init_rss_vec(rss);
             get_page(page);
-            page_dup_rmap(page, true);
+            page_dup_rmap(page, false);
             if ( PageAnon(page) ) {
                 rss[MM_ANONPAGES]++;
             }
