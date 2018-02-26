@@ -31,12 +31,14 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     privs = memdom_priv_get(memdom_id, smv_id);
 
     /* Protection fault */
-    if ( error_code & PF_PROT ) {        
+    if ( error_code & PF_PROT ) {
+        printk(KERN_ERR "[%s] Protection fault for smv %d and memdom %d\n", __func__, smv_id, memdom_id);
     }
 
     /* Write fault */
     if ( error_code & PF_WRITE ) {
         if ( privs & MEMDOM_WRITE ) {
+            printk(KERN_INFO "[%s] smv %d allowed to write memdom %d\n", __func__, smv_id, memdom_id);
             rv = 1;
         } else{
             printk(KERN_ERR "[%s] smv %d cannot write memdom %d\n", __func__, smv_id, memdom_id);
@@ -69,7 +71,7 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
 
     }
 
-    return rv;    
+    return rv;
 }
 
 /* Counter statistics helper functions */
