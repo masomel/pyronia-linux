@@ -49,6 +49,7 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     /* Read fault */ 
     else{
         if ( privs & MEMDOM_READ ) {
+             printk(KERN_INFO "[%s] smv %d allowed to read memdom %d\n", __func__, smv_id, memdom_id);
             rv = 1;
         } else{
             printk(KERN_ERR "[%s] smv %d cannot read memdom %d\n", __func__, smv_id, memdom_id);
