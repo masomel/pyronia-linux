@@ -3,6 +3,7 @@
 #include <linux/mm.h>
 #include <linux/mm_types.h>
 #include <linux/rmap.h>
+#include <linux/smv.h>
 
 /* Check whether current fault is a valid smv page fault.
  * Return 1 if it's a valid smv fault, 0 to block access 
@@ -30,26 +31,27 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     /* Get this smv's privileges */
     privs = memdom_priv_get(memdom_id, smv_id);
 
+    slog(KERN_INFO, "[%s] error code: %lu\n", __func__, error_code);
+    
     /* Protection fault */
     if ( error_code & PF_PROT ) {
-        printk(KERN_ERR "[%s] Protection fault for smv %d and memdom %d\n", __func__, smv_id, memdom_id);
+      slog(KERN_INFO, "[%s] Protection fault for smv %d and memdom %d\n", __func__, smv_id, memdom_id);
     }
 
     /* Write fault */
     if ( error_code & PF_WRITE ) {
         if ( privs & MEMDOM_WRITE ) {
-            printk(KERN_INFO "[%s] smv %d allowed to write memdom %d\n", __func__, smv_id, memdom_id);
+	  slog(KERN_INFO, "[%s] smv %d allowed to write memdom %d\n", __func__, smv_id, memdom_id);
             rv = 1;
         } else{
             printk(KERN_ERR "[%s] smv %d cannot write memdom %d\n", __func__, smv_id, memdom_id);
             rv = 0; // Try to write a unwrittable address
         }
-        
     }
     /* Read fault */ 
-    else{
+    else {
         if ( privs & MEMDOM_READ ) {
-             printk(KERN_INFO "[%s] smv %d allowed to read memdom %d\n", __func__, smv_id, memdom_id);
+	  slog(KERN_INFO, "[%s] smv %d allowed to read memdom %d\n", __func__, smv_id, memdom_id);
             rv = 1;
         } else{
             printk(KERN_ERR "[%s] smv %d cannot read memdom %d\n", __func__, smv_id, memdom_id);
@@ -59,17 +61,16 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
 
     /* kernel-/user-mode fault */
     if ( error_code & PF_USER ) {
-
+      slog(KERN_INFO, "[%s] user mode for smv %d\n", __func__, smv_id);
     }
 
     /* Use of reserved bit detected */
     if ( error_code & PF_RSVD ) {
-
     }
 
     /* Fault was instruction fetch */
     if ( error_code & PF_INSTR ) {
-
+      slog(KERN_INFO, "[%s] instruction fetch for smv %d\n", __func__, smv_id);
     }
 
     return rv;

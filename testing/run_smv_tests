@@ -2,8 +2,18 @@
 
 SRCDIR=$HOME/libpyronia/libraries/libsmv/testcases
 
+if [ $# -ne 1 ];
+then
+    echo "Usage: ./run_smv_tests (0 | 1)"
+    exit 0
+fi
+
+RUN=$1
+
+if [ $RUN == "0" ];
+then
+
 gcc -g $SRCDIR/memdom_ops_tests.c -o $HOME/memdom_ops_test -lsmv
-gcc -g $SRCDIR/memdom_fault_tests.c -o $HOME/memdom_fault_test -lsmv -lpthread
 gcc -g $SRCDIR/smv_ops_tests.c -o $HOME/smv_ops_test -lsmv
 gcc -g $SRCDIR/smvthread_ops_tests.c -o $HOME/smvthread_ops_test -lsmv -lpthread
 gcc -g $SRCDIR/tc_memdom_alloc.c -o $HOME/tc_memdom_alloc_test -lsmv -lpthread
@@ -16,10 +26,9 @@ gcc -g $SRCDIR/tc_cond_var.c -o $HOME/tc_cond_var_test -lsmv -lpthread
 
 cd $HOME
 
-echo "*** Running End-to-End Kernel Tests***"
+echo "*** Running End-to-End SMV Tests***"
 
 ./memdom_ops_test
-./memdom_fault_test
 ./smv_ops_test
 ./smvthread_ops_test
 ./tc_memdom_create_test
@@ -29,3 +38,18 @@ echo "*** Running End-to-End Kernel Tests***"
 ./tc_shared_mm_test
 ./tc_cond_var_test
 ./privs_test
+
+elif [ $RUN == "1" ];
+then
+
+    gcc -g $SRCDIR/memdom_no_privs_fault.c -o $HOME/memdom_no_privs_test -lsmv -lpthread
+    gcc -g $SRCDIR/memdom_grant_revoke_fault.c -o $HOME/memdom_grant_revoke_test -lsmv -lpthread
+    #gcc -g $SRCDIR/memdom_write_fault.c -o $HOME/memdom_write_fault_test -lsmv -lpthread
+
+cd $HOME
+echo "*** Running Page Fault Tests***"
+./memdom_no_privs_test
+./memdom_grant_revoke_test
+#./memdom_write_fault_test
+
+fi

@@ -3558,7 +3558,7 @@ static int handle_pte_fault(struct fault_env *fe)
             }
             else {
                  if (fe->vma->vm_mm->using_smv) {
-                     slog(KERN_INFO, "[%s] addr 0x%16lx !fe->pte, calling do_fault\n", __func__, fe->address);
+		   slog(KERN_INFO, "[%s] addr 0x%16lx !fe->pte, calling do_fault\n", __func__, fe->address);
                  }
 		 return do_fault(fe);
             }
@@ -3590,7 +3590,7 @@ static int handle_pte_fault(struct fault_env *fe)
 	if (fe->flags & FAULT_FLAG_WRITE) {
             if (!pte_write(entry)) {
                 if (fe->vma->vm_mm->using_smv) {
-                    slog(KERN_INFO, "[%s] addr 0x%16lx !pte_write, calling do_wp_page\n", __func__, fe->address);
+		  slog(KERN_INFO, "[%s] addr 0x%16lx !pte_write, calling do_wp_page\n", __func__, fe->address);
                 }
                 return do_wp_page(fe, entry);
             }
@@ -3702,10 +3702,10 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
             }
 
             if (rv == 0 || rv == VM_FAULT_NOPAGE) {
-                slog(KERN_INFO, "[%s] addr 0x%16lx done\n", __func__, address);
+	      slog(KERN_INFO, "[%s] addr 0x%16lx done\n", __func__, address);
             }
             else {
-                slog(KERN_INFO, "[%s] addr 0x%16lx failed\n", __func__, address);
+	      slog(KERN_INFO, "[%s] addr 0x%16lx failed\n", __func__, address);
             }
             if ( current->smv_id == MAIN_THREAD) {
                 slog(KERN_INFO, "[%s] smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx\n",
