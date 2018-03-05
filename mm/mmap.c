@@ -1217,6 +1217,14 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			pkey = 0;
 	}
 
+	/* If we're running in an SMV, always ignore the protections 
+	 * we're getting from userspace, and set prot to PROT_NONE. 
+	 * This will ensure that any access to memory will trigger
+	 * a page fault. */
+	if (mm->using_smv) {
+	  prot = PROT_NONE;
+	}
+
 	/* Do simple checking here so the lower-level routines won't have
 	 * to. we assume access permissions have been handled by the open
 	 * of the memory object, so we don't do any here.
@@ -1522,18 +1530,8 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	vma->vm_mm = mm;
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
-        if (vma->vm_flags & VM_MEMDOM) {
-            /* if this vma is memdom-protected, we don't want to allow
-             * any reads or writes. This will trigger a page fault for every access,
-             * and guarantee that the kernel always checks the SMV memdom access
-             * permissions. */
-            vma->vm_flags = vm_flags ^ (VM_READ | VM_WRITE);
-            vma->vm_page_prot = vm_get_page_prot(vm_flags ^ (VM_READ | VM_WRITE));
-        }
-        else {
-            vma->vm_flags = vm_flags;
-            vma->vm_page_prot = vm_get_page_prot(vm_flags);
-        }
+	vma->vm_flags = vm_flags;
+	vma->vm_page_prot = vm_get_page_prot(vm_flags);
 	vma->vm_pgoff = pgoff;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
 
@@ -1543,9 +1541,9 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
         if ( vm_flags & VM_MEMDOM ) {
             vma->memdom_id = current->mmap_memdom_id;
             current->mmap_memdom_id = -1; // reset to -1
-            slog(KERN_INFO, "[%s] smv %d allocated vma in memdom %d [0x%16lx - 0x%16lx)\n",
+            slog(KERN_INFO, "[%s] smv %d allocated vma in memdom %d [0x%16lx - 0x%16lx) with protection %lu\n",
                    __func__, current->smv_id, vma->memdom_id,
-                   vma->vm_start, vma->vm_end);
+		 vma->vm_start, vma->vm_end, pgprot_val(vma->vm_page_prot)&(PROT_READ|PROT_WRITE|PROT_EXEC|PROT_NONE));
 	}
         else {
             vma->memdom_id = MAIN_THREAD;

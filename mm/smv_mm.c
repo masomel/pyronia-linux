@@ -31,7 +31,7 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     /* Get this smv's privileges */
     privs = memdom_priv_get(memdom_id, smv_id);
 
-    slog(KERN_INFO, "[%s] the SMV's privileges: %d\n", __func__, privs);
+    slog(KERN_INFO, "[%s] the error code: %lu\n", __func__, error_code);
     
     /* Protection fault */
     if ( error_code & PF_PROT ) {
