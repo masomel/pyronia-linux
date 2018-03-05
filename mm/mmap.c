@@ -1522,8 +1522,18 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	vma->vm_mm = mm;
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
-	vma->vm_flags = vm_flags;
-	vma->vm_page_prot = vm_get_page_prot(vm_flags);
+        if (vma->vm_flags & VM_MEMDOM) {
+            /* if this vma is memdom-protected, we don't want to allow
+             * any reads or writes. This will trigger a page fault for every access,
+             * and guarantee that the kernel always checks the SMV memdom access
+             * permissions. */
+            vma->vm_flags = vm_flags ^ (VM_READ | VM_WRITE);
+            vma->vm_page_prot = vm_get_page_prot(vm_flags ^ (VM_READ | VM_WRITE));
+        }
+        else {
+            vma->vm_flags = vm_flags;
+            vma->vm_page_prot = vm_get_page_prot(vm_flags);
+        }
 	vma->vm_pgoff = pgoff;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
 

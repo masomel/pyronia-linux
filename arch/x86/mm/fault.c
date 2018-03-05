@@ -1125,8 +1125,15 @@ int show_unhandled_signals = 1;
 static inline int
 access_error(unsigned long error_code, struct vm_area_struct *vma)
 {
+    /* Make sure we return no error if the vma is memdom protected */
+    if (vma->vm_flags & VM_MEMDOM) {
+        slog(KERN_INFO, "[%s] this VMA is memdom protected, checking if valid SMV fault\n", __func__);
+        return 0;
+    }
+
         /* This is only called for the current mm, so: */
         bool foreign = false;
+
         /*
          * Make sure to check the VMA so that we do not perform
          * faults just to hit a PF_PK as soon as we fill in a
@@ -1382,6 +1389,8 @@ retry:
          * we can handle it..
          */
 good_area:
+        /* access_error() will return false if the vma is memdom-protected
+         * and delegate to smv_valid_fault() to determine if we should segfault */
         if (unlikely(access_error(error_code, vma))) {
             bad_area_access_error(regs, error_code, address, vma);
             return;
