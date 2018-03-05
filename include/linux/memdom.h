@@ -42,6 +42,7 @@ struct memdom_struct {
     DECLARE_BITMAP(smv_bitmapWrite, SMV_ARRAY_SIZE); // Bitmap of smv.  Set to 1 if smv[i] can write this memdom, 0 otherwise.
     DECLARE_BITMAP(smv_bitmapExecute, SMV_ARRAY_SIZE); // Bitmap of smv.  Set to 1 if smv[i] can execute data in this memdom, 0 otherwise.
     DECLARE_BITMAP(smv_bitmapAllocate, SMV_ARRAY_SIZE); // Bitmap of smv.  Set to 1 if smv[i] can allocate data in this memdom, 0 otherwise.
+    unsigned long max_prot; // the strictest memory protection common to all mapped SMVs
 };
 
 /// --- Functions called by the kernel internally to manage memory space --- ///
@@ -49,6 +50,9 @@ struct memdom_struct {
 #define free_memdom(memdom) (kmem_cache_free(memdom_cachep, memdom))
 extern void memdom_init(void);
 int memdom_claim_all_vmas(int memdom_id);
+int memdom_set_max_prot(struct mm_struct *mm, int memdom_id, unsigned long prot);
+int memdom_mprotect_all_vmas(struct mm_struct *mm, int memdom_id);
+unsigned long memdom_get_max_prot(int memdom_id);
 
 /// --- Functions exported to user space to manage metadata --- ///
 int memdom_create(void);

@@ -1222,7 +1222,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	 * This will ensure that any access to memory will trigger
 	 * a page fault. */
 	if (mm->using_smv) {
-	  prot = PROT_NONE;
+            prot = memdom_get_max_prot(current->mmap_memdom_id);
 	}
 
 	/* Do simple checking here so the lower-level routines won't have

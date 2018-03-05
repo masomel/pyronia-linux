@@ -4,9 +4,76 @@
 #include <linux/slab.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/mman.h>
 
 /* SLAB cache for smv_struct structure  */
 static struct kmem_cache *memdom_cachep;
+
+/* Convert the memdom access privileges into VMA 
+ * protection values. */
+static unsigned long memdom_privs_to_pgprot(int privs) {
+    unsigned long vm_prot = 0;
+
+    if( privs & MEMDOM_READ ) {
+        vm_prot |= PROT_READ;
+    }
+    if( privs & MEMDOM_WRITE ) {
+        vm_prot |= PROT_WRITE;
+    }
+    if( privs & MEMDOM_EXECUTE ) {
+        vm_prot |= PROT_EXEC;
+    }
+    if( privs & MEMDOM_ALLOCATE ) {
+        vm_prot |= PROT_WRITE;
+    }
+
+    return vm_prot;
+}
+
+/* Calculate the least common memdom access privilege
+ * for `memdom_id` among all SMVs */
+static int compute_min_memdom_privs(struct mm_struct *mm, int memdom_id) {
+    int smv_id = 0;
+    int min_privs = 0xffffffff;
+    do {
+        smv_id = find_next_bit(mm->smv_bitmapInUse, SMV_ARRAY_SIZE, smv_id);
+        min_privs &= memdom_priv_get(memdom_id, smv_id);
+        slog(KERN_INFO, "[%s] min privs from memdom %d with smv %d: %d\n", __func__, memdom_id, smv_id, min_privs);
+    }
+    while (smv_id != SMV_ARRAY_SIZE);
+    return min_privs;
+}
+
+/* mprotect all vmas belonging to the memdom_id using the 
+ * memdom's max protection value.
+ * Note: the caller must hold the memdom_mutex. */
+int memdom_mprotect_all_vmas(struct mm_struct *mm, int memdom_id) {
+    struct vm_area_struct *vma = mm->mmap;
+    unsigned long end_addr = -1;
+    int error = 0;
+    struct memdom_struct *memdom = NULL;
+
+    mutex_lock(&mm->smv_metadataMutex);
+    memdom = current->mm->memdom_metadata[memdom_id];
+    mutex_unlock(&mm->smv_metadataMutex);
+
+    if (!memdom) {
+        printk(KERN_ERR "[%s] memdom %p not found\n", __func__, memdom);
+        return -1;
+    }
+
+    for ( ; vma && vma->vm_start < end_addr; vma = vma->vm_next) {
+        if (vma->memdom_id == memdom_id && vma->vm_flags & VM_MEMDOM) {
+            error = mprotect(vma->vm_start, vma->vm_end-vma->vm_start,
+                     memdom->max_prot);
+            if (error) {
+                goto out;
+            }
+        }
+    }
+ out:
+    return error;
+}
 
 /** void memdom_init(void)
  *  Create slab cache for future memdom_struct allocation This
@@ -21,6 +88,53 @@ void memdom_init(void){
     } else{
         slog(KERN_INFO, "[%s] memdom slabs initialized\n", __func__);
     }
+}
+
+/* Set the max VMA protection for the given memdom based on the given privs */
+int memdom_set_max_prot(struct mm_struct *mm, int memdom_id, unsigned long prot) {
+    struct memdom_struct *memdom = NULL;
+
+    mutex_lock(&mm->smv_metadataMutex);
+    memdom = current->mm->memdom_metadata[memdom_id];
+    mutex_unlock(&mm->smv_metadataMutex);
+
+    if (!memdom) {
+        printk(KERN_ERR "[%s] memdom %p not found\n", __func__, memdom);
+        return -1;
+    }
+    
+    mutex_lock(&memdom->memdom_mutex);
+    memdom->max_prot = prot;
+    mutext_unlock(&memdom->memdom_mutex);
+    return 0;
+}
+
+unsigned long memdom_get_max_prot(int memdom_id) {
+    struct memdom_struct *memdom = NULL;
+    struct mm_struct *mm = current->mm;
+    unsigned long prot = 0;
+
+    if( memdom_id < 0 || memdom_id > LAST_MEMDOM_INDEX ) {
+        printk(KERN_ERR "[%s] Error, out of bound: memdom %d\n", __func__, memdom_id);
+        return -1;
+    }
+
+    mutex_lock(&mm->smv_metadataMutex);
+    memdom = current->mm->memdom_metadata[memdom_id];
+    mutex_unlock(&mm->smv_metadataMutex);
+
+    if( !memdom ) {
+        printk(KERN_ERR "[%s] memdom %p not found\n", __func__, memdom);
+        return -1;
+    }
+    
+    /* Get privilege info */
+    mutex_lock(&memdom->memdom_mutex);
+    prot = memdom->max_prot;
+    mutex_unlock(&memdom->memdom_mutex);
+
+    slog(KERN_INFO, "[%s] memdom_id %d has max_prot %lu\n", __func__, memdom_id, prot);
+    return prot;
 }
 
 /* Create a memdom and update metadata */
@@ -49,7 +163,8 @@ int memdom_create(void){
     bitmap_zero(memdom->smv_bitmapRead, SMV_ARRAY_SIZE);    
     bitmap_zero(memdom->smv_bitmapWrite, SMV_ARRAY_SIZE);    
     bitmap_zero(memdom->smv_bitmapExecute, SMV_ARRAY_SIZE);    
-    bitmap_zero(memdom->smv_bitmapAllocate, SMV_ARRAY_SIZE);    
+    bitmap_zero(memdom->smv_bitmapAllocate, SMV_ARRAY_SIZE);
+    memdom->max_prot = 0; // set to PROT_NONE to begin with
     mutex_init(&memdom->memdom_mutex);
 
     /* Record this new memdom to mm */
@@ -177,6 +292,7 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
     struct smv_struct *smv; 
     struct memdom_struct *memdom; 
     struct mm_struct *mm = current->mm;
+    unsigned long new_prot;
 
     if( smv_id > LAST_SMV_INDEX || memdom_id > LAST_MEMDOM_INDEX ) {
         printk(KERN_ERR "[%s] Error, out of bound: smv %d / memdom %d\n", __func__, smv_id, memdom_id);
@@ -216,9 +332,19 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
     if( privs & MEMDOM_ALLOCATE ) {
         set_bit(smv_id, memdom->smv_bitmapAllocate);
         slog(KERN_INFO, "[%s] Added allocate privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
-    }    
-    mutex_unlock(&memdom->memdom_mutex);     
-     
+    }
+    mutex_unlock(&memdom->memdom_mutex);
+
+     // re-compute min privileges and see if we need to re-mprotect all VMAs
+    new_prot = memdom_privs_to_pg_prot(compute_min_memdom_privs(mm, memdom_id));
+    mutex_lock(&memdom->memdom_mutex);
+    if (new_prot != memdom->max_prot) {
+        memdom->max_prot = new_prot;
+        if (memdom_mprotect_all_vmas(mm, memdom_id))
+            return -1;
+    }
+    mutex_unlock(&memdom->memdom_mutex);
+    
     return 0;
 }
 EXPORT_SYMBOL(memdom_priv_add);
@@ -228,6 +354,7 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
     struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
     struct mm_struct *mm = current->mm;
+    unsigned long new_prot;
 
     if( smv_id > LAST_SMV_INDEX || memdom_id > LAST_MEMDOM_INDEX ) {
         printk(KERN_ERR "[%s] Error, out of bound: smv %d / memdom %d\n", __func__, smv_id, memdom_id);
@@ -267,7 +394,17 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
     if( privs & MEMDOM_ALLOCATE ) {
         clear_bit(smv_id, memdom->smv_bitmapAllocate);
         slog(KERN_INFO, "[%s] Revoked allocate privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
-    }            
+    }
+    mutex_unlock(&memdom->memdom_mutex);
+
+    // re-compute min privileges and see if we need to re-mprotect all VMAs
+    new_prot = memdom_privs_to_pg_prot(compute_min_memdom_privs(mm, memdom_id));
+    mutex_lock(&memdom->memdom_mutex);
+    if (new_prot != memdom->max_prot) {
+        memdom->max_prot = new_prot;
+        if (memdom_mprotect_all_vmas(mm, memdom_id))
+            return -1;
+    }
     mutex_unlock(&memdom->memdom_mutex);
 
     return 0;
