@@ -33,14 +33,15 @@ static unsigned long memdom_privs_to_pgprot(int privs) {
 /* Calculate the least common memdom access privilege
  * for `memdom_id` among all SMVs */
 static int compute_min_memdom_privs(struct mm_struct *mm, int memdom_id) {
-    int smv_id = 0;
+    int next_smv = 0;
     int min_privs = 0xffffffff;
-    do {
-        smv_id = find_next_bit(mm->smv_bitmapInUse, SMV_ARRAY_SIZE, smv_id);
-        min_privs &= memdom_priv_get(memdom_id, smv_id);
-        slog(KERN_INFO, "[%s] min privs from memdom %d with smv %d: %d\n", __func__, memdom_id, smv_id, min_privs);
+    int i = 0;
+    for (i = 0; i < atomic_read(&mm->num_smvs); i++) {
+        next_smv = find_next_bit(mm->smv_bitmapInUse, SMV_ARRAY_SIZE, next_smv);
+        min_privs &= memdom_priv_get(memdom_id, next_smv);
+        slog(KERN_INFO, "[%s] min privs from memdom %d with smv %d: %d\n", __func__, memdom_id, next_smv, min_privs);
+	next_smv += 1; // increment for next iteration
     }
-    while (smv_id != SMV_ARRAY_SIZE);
     return min_privs;
 }
 
@@ -64,7 +65,7 @@ int memdom_mprotect_all_vmas(struct mm_struct *mm, int memdom_id) {
 
     for ( ; vma && vma->vm_start < end_addr; vma = vma->vm_next) {
         if (vma->memdom_id == memdom_id && vma->vm_flags & VM_MEMDOM) {
-            error = mprotect(vma->vm_start, vma->vm_end-vma->vm_start,
+            error = do_mprotect(vma->vm_start, vma->vm_end-vma->vm_start,
                      memdom->max_prot);
             if (error) {
                 goto out;
@@ -105,7 +106,7 @@ int memdom_set_max_prot(struct mm_struct *mm, int memdom_id, unsigned long prot)
     
     mutex_lock(&memdom->memdom_mutex);
     memdom->max_prot = prot;
-    mutext_unlock(&memdom->memdom_mutex);
+    mutex_unlock(&memdom->memdom_mutex);
     return 0;
 }
 
@@ -336,7 +337,7 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
     mutex_unlock(&memdom->memdom_mutex);
 
      // re-compute min privileges and see if we need to re-mprotect all VMAs
-    new_prot = memdom_privs_to_pg_prot(compute_min_memdom_privs(mm, memdom_id));
+    new_prot = memdom_privs_to_pgprot(compute_min_memdom_privs(mm, memdom_id));
     mutex_lock(&memdom->memdom_mutex);
     if (new_prot != memdom->max_prot) {
         memdom->max_prot = new_prot;
@@ -398,7 +399,7 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
     mutex_unlock(&memdom->memdom_mutex);
 
     // re-compute min privileges and see if we need to re-mprotect all VMAs
-    new_prot = memdom_privs_to_pg_prot(compute_min_memdom_privs(mm, memdom_id));
+    new_prot = memdom_privs_to_pgprot(compute_min_memdom_privs(mm, memdom_id));
     mutex_lock(&memdom->memdom_mutex);
     if (new_prot != memdom->max_prot) {
         memdom->max_prot = new_prot;

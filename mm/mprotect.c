@@ -352,9 +352,7 @@ fail:
 	return error;
 }
 
-SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
-		unsigned long, prot)
-{
+int do_mprotect (unsigned long start, size_t len, unsigned long prot) {
 	unsigned long nstart, end, tmp, reqprot;
 	struct vm_area_struct *vma, *prev;
 	int error = -EINVAL;
@@ -453,4 +451,9 @@ SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
 out:
 	up_write(&current->mm->mmap_sem);
 	return error;
+}
+
+SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
+		unsigned long, prot) {
+  return do_mprotect(start, len, prot);
 }

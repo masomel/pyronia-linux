@@ -2052,6 +2052,9 @@ do_mmap_pgoff(struct file *file, unsigned long addr,
 	return do_mmap(file, addr, len, prot, flags, 0, pgoff, populate);
 }
 
+extern int do_mprotect(unsigned long start, size_t len,
+				 unsigned long prot);
+
 #ifdef CONFIG_MMU
 extern int __mm_populate(unsigned long addr, unsigned long len,
 			 int ignore_errors);
