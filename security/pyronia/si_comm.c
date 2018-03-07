@@ -14,13 +14,7 @@
 #include "include/callgraph.h"
 #include "include/si_comm.h"
 
-/* attribute policy: defines which attribute has which type (e.g int,
- * char * etc) possible values defined in net/netlink.h
- */
-static struct nla_policy si_comm_genl_policy[SI_COMM_A_MAX + 1] = {
-    [SI_COMM_A_USR_MSG] = { .type = NLA_NUL_STRING },
-    [SI_COMM_A_KERN_REQ] = { .type = NLA_U8 },
-};
+struct sock *upcall_sock = NULL;
 
 /* family definition */
 static struct genl_family si_comm_gnl_family = {
@@ -67,7 +61,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     }
 
     // create the message
-    rc = nla_put_int(skb, SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
+    rc = nla_put_u8(skb, SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
     if (rc != 0) {
         printk("[%s] Could not create the message for %d\n", __func__, pid);
         return 0;
@@ -77,13 +71,13 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     genlmsg_end(skb, msg_head);
 
     // send the message
-    rc = genlmsg_unicast(&init_net, skb, pid);
+    rc = nlmsg_unicast(upcall_sock, skb, pid);
     if (rc != 0) {
         printk("[%s] Error sending message to %d\n", __func__, pid);
         return 0;
     }
 
-    // TODO: recv message from userland and parse to callgraph
+    // TODO: recv message on upcall_sock here
 
     return 0;
 }
@@ -133,15 +127,23 @@ static int __init kernel_comm_init(void)
     rc = genl_register_family_with_ops(&si_comm_gnl_family, si_comm_gnl_ops);
     if (rc != 0){
         printk("register ops: %i\n",rc);
-        genl_unregister_family(&si_comm_gnl_family);
-        goto failure;
+        goto fail;
+    }
+
+    /* initialize the upcall socket */
+    struct netlink_kernel_cfg cfg = {};
+    upcall_sock = netlink_kernel_create(&init_net, NETLINK_GENERIC, &cfg);
+    if (!upcall_sock) {
+        printk("upcall socket create\n");
+        goto fail;
     }
 
     printk(KERN_INFO "[pyronia] Initialized SI communication channel\n");
     return 0;
 
-failure:
-    printk(KERN_CRIT "[pyronia] error occured while inserting the netlink module\n");
+fail:
+    genl_unregister_family(&si_comm_gnl_family);
+    printk(KERN_CRIT "[pyronia] Error occured while creating SI netlink channel\n");
     return -1;
 }
 

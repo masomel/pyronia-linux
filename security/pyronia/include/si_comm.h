@@ -38,6 +38,11 @@ enum {
 };
 #define SI_COMM_C_MAX (__SI_COMM_C_MAX - 1)
 
+struct nla_policy si_comm_genl_policy[] = {
+    [SI_COMM_A_USR_MSG] = { .type = NLA_NUL_STRING },
+    [SI_COMM_A_KERN_REQ] = { .type = NLA_U8 },
+};
+
 pyr_cg_node_t *pyr_stack_request(u32);
 int pyr_register_proc(struct sk_buff *,  struct genl_info *);
 int pyr_save_context(struct sk_buff *,  struct genl_info *);
