@@ -1218,11 +1218,12 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	}
 
 	/* If we're running in an SMV, always ignore the protections 
-	 * we're getting from userspace, and set prot to PROT_NONE. 
+	 * we're getting from userspace, and set prot to the current SMV's
+         * page protection for the mmap_memdom_id. 
 	 * This will ensure that any access to memory will trigger
 	 * a page fault. */
 	if (mm->using_smv) {
-            prot = memdom_get_max_prot(current->mmap_memdom_id);
+            prot = memdom_get_pgprot(current->mmap_memdom_id, current->smv_id);
 	}
 
 	/* Do simple checking here so the lower-level routines won't have
