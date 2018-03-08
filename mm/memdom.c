@@ -451,12 +451,13 @@ int memdom_claim_all_vmas(int memdom_id){
         return -1;
     }
 
-        down_write(&mm->mmap_sem);
-        for (vma = mm->mmap; vma; vma = vma->vm_next) {
+    down_write(&mm->mmap_sem);
+    for (vma = mm->mmap; vma; vma = vma->vm_next) {
         vma->memdom_id = MAIN_THREAD;
+        vm->vm_flags |= VM_MEMDOM;
         vma_count++;
     }
-        up_write(&mm->mmap_sem);
+    up_write(&mm->mmap_sem);
 
     slog(KERN_INFO, "[%s] Initialized %d vmas to be in memdom %d\n", __func__, vma_count, memdom_id);
     return 0;

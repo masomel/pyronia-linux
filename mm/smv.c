@@ -422,7 +422,7 @@ static void smv_mprotect_all_vmas(int smv_id, struct mm_struct *mm) {
     /* TODO: add privilege checks */
 
     mutex_lock(&mm->smv_metadataMutex);
-    smv = current->mm->smv_metadata[smv_id];
+    smv = mm->smv_metadata[smv_id];
     mutex_unlock(&mm->smv_metadataMutex);
 
     if( !smv ) {
@@ -433,6 +433,7 @@ static void smv_mprotect_all_vmas(int smv_id, struct mm_struct *mm) {
     mutex_lock(&smv->smv_mutex);
     for (i = 0; i < atomic_read(&mm->num_memdoms); i++) {
       next_memdom = find_next_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE, next_memdom);
+      slog(KERN_INFO, "[%s] mprotecting memdom %d for smv %d\n", __func__, next_memdom, smv_id);
       err = memdom_mprotect_all_vmas(mm, next_memdom, smv_id);
       if (!err)
 	mprotect_count++;
