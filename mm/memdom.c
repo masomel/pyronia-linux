@@ -465,6 +465,7 @@ int memdom_claim_all_vmas(int memdom_id){
 /* Return the memory domain's VMA page protection for the given smv.
  */
 unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
+    struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
     struct mm_struct *mm = current->mm;
     unsigned long prot = 0;
@@ -500,6 +501,7 @@ int memdom_mprotect_all_vmas(struct mm_struct *mm, int memdom_id, int smv_id) {
     struct vm_area_struct *vma = mm->mmap;
     unsigned long end_addr = -1;
     int error = 0;
+    struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
 
     mutex_lock(&mm->smv_metadataMutex);

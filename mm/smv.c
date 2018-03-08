@@ -407,35 +407,63 @@ void smv_free_pgd(struct mm_struct *mm, int smv_id){
     free_page((unsigned long)mm->pgd_smv[smv_id]);
 }
 
+static void smv_mprotect_all_vmas(int smv_id, struct mm_struct *mm) {
+    struct smv_struct *smv = NULL;
+    int i;
+    int next_memdom = 0;
+    int mprotect_count = 0;
+    int err;
+
+    if( smv_id < 0 || smv_id > LAST_SMV_INDEX ) {
+        printk(KERN_ERR "[%s] Error, out of bound: smv %d\n", __func__, smv_id);
+        return;
+    }
+
+    /* TODO: add privilege checks */
+
+    mutex_lock(&mm->smv_metadataMutex);
+    smv = current->mm->smv_metadata[smv_id];
+    mutex_unlock(&mm->smv_metadataMutex);
+
+    if( !smv ) {
+        printk(KERN_ERR "[%s] smv %p does not exist.\n", __func__, smv);
+        return;
+    }
+    
+    mutex_lock(&smv->smv_mutex);
+    for (i = 0; i < atomic_read(&mm->num_memdoms); i++) {
+      next_memdom = find_next_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE, next_memdom);
+      err = memdom_mprotect_all_vmas(mm, next_memdom, smv_id);
+      if (!err)
+	mprotect_count++;
+      else
+	slog(KERN_ERR, "[%s] Could not mprotect vmas for smv %d in memdom %d\n", __func__, smv_id, next_memdom);
+      next_memdom += 1; // increment for next iteration
+    }
+    mutex_unlock(&smv->smv_mutex);
+
+    if (!err)
+      slog(KERN_INFO, "[%s] Re-mprotected vmas for smv %d in %d memdoms\n", __func__, smv_id, mprotect_count);
+}
+
 /* Hook for security context switch from one smv to another (change secure memory view)
  */
 void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
                    struct mm_struct *prev_mm, struct mm_struct *next_mm){
 
-    unsigned int md;
-    int err = 0;
-    int mprotect_count = 0;
-
-    /* Skip smv context switch if the next tasks is not in any smvs, or if next_mm is NULL */
+    /* Skip smv context switch if the next tasks is not in any smvs, 
+     * or if next_mm is NULL */
     if( (next_tsk && next_tsk->smv_id == -1) ||
          next_mm == NULL) {
         return;
     }
 
+    slog(KERN_INFO, "[%s] switching from smv %d to %d\n", __func__, prev_tsk->smv_id, next_tsk->smv_id);
+    
     /* Since we're switching context, we need to re-mprotect the
      * vmas that the next smv has access to according to the next
      * smv's access rights. */
-    for (md = 0; md < SMV_ARRAY_SIZE; md++) {
-        if (smv_is_in_memdom(md, next_tsk->smv_id)) {
-            err = memdom_mprotect_all_vmas(next_mm, md, next_tsk->smv_id);
-            if (!err)
-                mprotect_count++;
-            else
-                slog(KERN_ERR, "[%s] Could not mprotect vmas for smv %d in memdom %d\n", __func__, next_tsk->smv_id, md);
-        }
-    }
-    if (!err)
-        slog(KERN_INFO, "[%s] Re-mprotected vmas for smv %d in %d memdoms\n", __func__, next_tsk->smv_id, mprotect_count);
+    smv_mprotect_all_vmas(next_tsk->smv_id, next_mm);    
 }
 
 /* See implementation in memory.c */
