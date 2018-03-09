@@ -454,7 +454,7 @@ int memdom_claim_all_vmas(int memdom_id){
     down_write(&mm->mmap_sem);
     for (vma = mm->mmap; vma; vma = vma->vm_next) {
         vma->memdom_id = MAIN_THREAD;
-        vm->vm_flags |= VM_MEMDOM;
+        vma->vm_flags |= VM_MEMDOM;
         vma_count++;
     }
     up_write(&mm->mmap_sem);
@@ -506,8 +506,8 @@ int memdom_mprotect_all_vmas(struct mm_struct *mm, int memdom_id, int smv_id) {
     struct memdom_struct *memdom = NULL;
 
     mutex_lock(&mm->smv_metadataMutex);
-    smv = current->mm->smv_metadata[smv_id];
-    memdom = current->mm->memdom_metadata[memdom_id];
+    smv = mm->smv_metadata[smv_id];
+    memdom = mm->memdom_metadata[memdom_id];
     mutex_unlock(&mm->smv_metadataMutex);
 
     if (!memdom || !smv) {

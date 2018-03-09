@@ -438,7 +438,7 @@ static void smv_mprotect_all_vmas(int smv_id, struct mm_struct *mm) {
       if (!err)
 	mprotect_count++;
       else
-	slog(KERN_ERR, "[%s] Could not mprotect vmas for smv %d in memdom %d\n", __func__, smv_id, next_memdom);
+	slog(KERN_ERR, "[%s] Could not mprotect vmas for smv %d in memdom %d; error = %d\n", __func__, smv_id, next_memdom, err);
       next_memdom += 1; // increment for next iteration
     }
     mutex_unlock(&smv->smv_mutex);
@@ -460,6 +460,10 @@ void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
     }
 
     slog(KERN_INFO, "[%s] switching from smv %d to %d\n", __func__, prev_tsk->smv_id, next_tsk->smv_id);
+
+    /* Skip the mprotection if the prev->smv_id == -1 */
+    if (prev_tsk->smv_id == -1)
+      return;
     
     /* Since we're switching context, we need to re-mprotect the
      * vmas that the next smv has access to according to the next
