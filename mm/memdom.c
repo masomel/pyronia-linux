@@ -454,7 +454,7 @@ int memdom_claim_all_vmas(int memdom_id){
     down_write(&mm->mmap_sem);
     for (vma = mm->mmap; vma; vma = vma->vm_next) {
         vma->memdom_id = MAIN_THREAD;
-        vma->vm_flags |= VM_MEMDOM;
+        //vma->vm_flags |= VM_MEMDOM;
         vma_count++;
     }
     up_write(&mm->mmap_sem);
@@ -499,8 +499,7 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
  * memdom's page protection value for the given smv.
 */
 int memdom_mprotect_all_vmas(struct mm_struct *mm, int memdom_id, int smv_id) {
-    struct vm_area_struct *vma = mm->mmap;
-    unsigned long end_addr = -1;
+    struct vm_area_struct *vma;
     int error = 0;
     struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
@@ -516,7 +515,7 @@ int memdom_mprotect_all_vmas(struct mm_struct *mm, int memdom_id, int smv_id) {
     }
 
     mutex_lock(&memdom->memdom_mutex);
-    for ( ; vma && vma->vm_start < end_addr; vma = vma->vm_next) {
+    for (vma = mm->mmap; vma ; vma = vma->vm_next) {
         if (vma->memdom_id == memdom_id && vma->vm_flags & VM_MEMDOM) {
             error = do_mprotect(vma->vm_start, vma->vm_end-vma->vm_start,
                      memdom->pgprot[smv_id]);

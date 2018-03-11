@@ -330,7 +330,8 @@ EXPORT_SYMBOL(smv_get_smv_id);
 int register_smv_thread(int smv_id){
     struct mm_struct *mm = current->mm;
 
-    /* A child smv cannot register itself to MAIN_THREAD or a non-existing smv */
+    /* A child smv cannot register itself to MAIN_THREAD or a 
+       non-existing smv */
     if( smv_id == MAIN_THREAD || smv_id > LAST_SMV_INDEX ) {
         printk(KERN_ERR "[%s] Error, out of bound: smv %d\n", __func__, smv_id);
         return -1;
@@ -409,12 +410,11 @@ void smv_free_pgd(struct mm_struct *mm, int smv_id){
 
 static void smv_mprotect_all_vmas(int smv_id, struct mm_struct *mm) {
     struct smv_struct *smv = NULL;
-    int i;
     int next_memdom = 0;
     int mprotect_count = 0;
     int err;
 
-    if( smv_id < 0 || smv_id > LAST_SMV_INDEX ) {
+    if (smv_id < 0 || smv_id > LAST_SMV_INDEX) {
         printk(KERN_ERR "[%s] Error, out of bound: smv %d\n", __func__, smv_id);
         return;
     }
@@ -425,13 +425,13 @@ static void smv_mprotect_all_vmas(int smv_id, struct mm_struct *mm) {
     smv = mm->smv_metadata[smv_id];
     mutex_unlock(&mm->smv_metadataMutex);
 
-    if( !smv ) {
+    if (!smv) {
         printk(KERN_ERR "[%s] smv %p does not exist.\n", __func__, smv);
         return;
     }
     
     mutex_lock(&smv->smv_mutex);
-    for (i = 0; i < atomic_read(&mm->num_memdoms); i++) {
+    do {
       next_memdom = find_next_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE, next_memdom);
       slog(KERN_INFO, "[%s] mprotecting memdom %d for smv %d\n", __func__, next_memdom, smv_id);
       err = memdom_mprotect_all_vmas(mm, next_memdom, smv_id);
@@ -441,6 +441,7 @@ static void smv_mprotect_all_vmas(int smv_id, struct mm_struct *mm) {
 	slog(KERN_ERR, "[%s] Could not mprotect vmas for smv %d in memdom %d; error = %d\n", __func__, smv_id, next_memdom, err);
       next_memdom += 1; // increment for next iteration
     }
+    while (next_memdom != SMV_ARRAY_SIZE);
     mutex_unlock(&smv->smv_mutex);
 
     if (!err)
@@ -459,16 +460,14 @@ void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
         return;
     }
 
-    slog(KERN_INFO, "[%s] switching from smv %d to %d\n", __func__, prev_tsk->smv_id, next_tsk->smv_id);
-
-    /* Skip the mprotection if the prev->smv_id == -1 */
-    if (prev_tsk->smv_id == -1)
-      return;
+    slog(KERN_INFO, "[%s] prev == current? %d : next == current? %d\n", __func__, prev_tsk==current, next_tsk==current);
     
+    slog(KERN_INFO, "[%s] switching from smv %d to %d\n", __func__, current->smv_id, next_tsk->smv_id);
+
     /* Since we're switching context, we need to re-mprotect the
      * vmas that the next smv has access to according to the next
      * smv's access rights. */
-    smv_mprotect_all_vmas(next_tsk->smv_id, next_mm);    
+    //smv_mprotect_all_vmas(next_tsk->smv_id, next_mm);    
 }
 
 /* See implementation in memory.c */
