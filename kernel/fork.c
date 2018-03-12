@@ -1853,16 +1853,27 @@ long _do_fork(unsigned long clone_flags,
 		nr = PTR_ERR(p);
 	}
 
-        /* Reset smv_id for smv_thread_create and assign smv_id
-           to the child task p.
-           User space guarantees the atomic operation of
+	/* Do final new thread-related SMV housekeeping here;
+	 * User space guarantees the atomic operation of
            forking smv threads */
         if (current->mm) {
-            if (current->mm->standby_smv_id != -1) {
-                slog(KERN_INFO, "[%s] forked smv thread running in smv %d\n", __func__, current->mm->standby_smv_id);
-                p->smv_id = current->mm->standby_smv_id;
-                current->mm->standby_smv_id = -1;
-            }
+	  if (current->mm->standby_smv_id != -1) {
+	    /* Reset smv_id for smv_thread_create and assign smv_id
+	     * to the child task p. */
+	    p->smv_id = current->mm->standby_smv_id;
+	    current->mm->standby_smv_id = -1;
+	    
+	    /* Reset the page protection for the new child task
+	     * according to the SMV protection settings tracked in the main
+	     * thread. The assumption is that the smv will have already joined
+	     * the necessary memdoms for the thread to run ok, otherwise,
+	     * too bad. */
+	    if (smv_new_thread_mprotect(p))
+	      return -1;
+	    
+	    slog(KERN_INFO, "[%s] forked smv thread running in smv %d\n", __func__, p->smv_id);
+
+	  }
 	}
 
 	return nr;

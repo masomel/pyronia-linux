@@ -35,7 +35,21 @@ int smv_main_init(void){
 
     /* Create a global smv and memdom with ID: MAIN_THREAD, and set up metadata */
     smv_id = smv_create();
+
+    if (smv_id != MAIN_THREAD) {
+      printk(KERN_ERR "[%s] smv %d not available for main thread\n", __func__, MAIN_THREAD);
+      return -1;
+    }
+    
     memdom_id = memdom_create();
+
+    if (memdom_id != MAIN_THREAD) {
+      printk(KERN_ERR "[%s] memdom %d not available for main thread\n", __func__, MAIN_THREAD);
+      return -1;
+    }
+
+    current->smv_id = MAIN_THREAD;       // main thread is using MAIN_THREAD-th (0) smv_id
+    current->mmap_memdom_id = MAIN_THREAD;  // main thread is using MAIN_THREAD-th (0) as mmap_id
 
     /* Make the global smv join the global memdom with full privileges */
     smv_join_memdom(memdom_id, smv_id);
@@ -45,8 +59,6 @@ int smv_main_init(void){
     mutex_lock(&mm->smv_metadataMutex);
     mm->pgd_smv[MAIN_THREAD] = mm->pgd; // record the main thread's pgd
     mm->page_table_lock_smv[MAIN_THREAD] = mm->page_table_lock; // record the main thread's pgtable lock
-    current->smv_id = MAIN_THREAD;       // main thread is using MAIN_THREAD-th (0) smv_id
-    current->mmap_memdom_id = MAIN_THREAD;  // main thread is using MAIN_THREAD-th (0) as mmap_id
 
     /* make all existing vma in memdom_id: MAIN_THREAD */
     memdom_claim_all_vmas(MAIN_THREAD);
@@ -372,7 +384,6 @@ void smv_init(void){
     }
 }
 
-
 /* Allocate a pgd for the new smv */
 pgd_t *smv_alloc_pgd(struct mm_struct *mm, int smv_id){
     pgd_t *pgd = NULL;
@@ -408,46 +419,6 @@ void smv_free_pgd(struct mm_struct *mm, int smv_id){
     free_page((unsigned long)mm->pgd_smv[smv_id]);
 }
 
-static void smv_mprotect_all_vmas(int smv_id, struct mm_struct *mm) {
-    struct smv_struct *smv = NULL;
-    int next_memdom = 0;
-    int mprotect_count = 0;
-    int err;
-
-    if (smv_id < 0 || smv_id > LAST_SMV_INDEX) {
-        printk(KERN_ERR "[%s] Error, out of bound: smv %d\n", __func__, smv_id);
-        return;
-    }
-
-    /* TODO: add privilege checks */
-
-    mutex_lock(&mm->smv_metadataMutex);
-    smv = mm->smv_metadata[smv_id];
-    mutex_unlock(&mm->smv_metadataMutex);
-
-    if (!smv) {
-        printk(KERN_ERR "[%s] smv %p does not exist.\n", __func__, smv);
-        return;
-    }
-    
-    mutex_lock(&smv->smv_mutex);
-    do {
-      next_memdom = find_next_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE, next_memdom);
-      slog(KERN_INFO, "[%s] mprotecting memdom %d for smv %d\n", __func__, next_memdom, smv_id);
-      err = memdom_mprotect_all_vmas(mm, next_memdom, smv_id);
-      if (!err)
-	mprotect_count++;
-      else
-	slog(KERN_ERR, "[%s] Could not mprotect vmas for smv %d in memdom %d; error = %d\n", __func__, smv_id, next_memdom, err);
-      next_memdom += 1; // increment for next iteration
-    }
-    while (next_memdom != SMV_ARRAY_SIZE);
-    mutex_unlock(&smv->smv_mutex);
-
-    if (!err)
-      slog(KERN_INFO, "[%s] Re-mprotected vmas for smv %d in %d memdoms\n", __func__, smv_id, mprotect_count);
-}
-
 /* Hook for security context switch from one smv to another (change secure memory view)
  */
 void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
@@ -459,15 +430,6 @@ void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
          next_mm == NULL) {
         return;
     }
-
-    slog(KERN_INFO, "[%s] prev == current? %d : next == current? %d\n", __func__, prev_tsk==current, next_tsk==current);
-    
-    slog(KERN_INFO, "[%s] switching from smv %d to %d\n", __func__, current->smv_id, next_tsk->smv_id);
-
-    /* Since we're switching context, we need to re-mprotect the
-     * vmas that the next smv has access to according to the next
-     * smv's access rights. */
-    //smv_mprotect_all_vmas(next_tsk->smv_id, next_mm);    
 }
 
 /* See implementation in memory.c */
@@ -521,4 +483,37 @@ void smv_free_mmap(struct mm_struct *mm, int smv_id){
         slog(KERN_INFO, "[%s] After smv_free_mmap mm: %p, nr_pmds: %ld, nr_ptes: %ld\n",
                 __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
     }
+}
+
+/* Sets the page protection for all member memdoms for the given task 
+ * according to its SMV memdom access permissions set in the main 
+ * thread (i.e. current) so far. */
+int smv_new_thread_mprotect(struct task_struct *tsk) {
+    int error = 0;
+    struct smv_struct *smv = NULL;
+    struct mm_struct *mm = tsk->mm;
+    int next_memdom = 0;
+
+    mutex_lock(&mm->smv_metadataMutex);
+    smv = current->mm->smv_metadata[tsk->smv_id];
+    mutex_unlock(&mm->smv_metadataMutex);
+
+    if (!smv) {
+        printk(KERN_ERR "[%s] smv %p not found\n", __func__, smv);
+        return -1;
+    }
+
+    mutex_lock(&smv->smv_mutex);
+    do {
+      next_memdom = find_next_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE, next_memdom);
+      error = memdom_mprotect_all_vmas(tsk, next_memdom, tsk->smv_id);
+      if (error) {
+	goto out;
+      }
+      next_memdom++;
+    }
+    while(next_memdom != SMV_ARRAY_SIZE);
+ out:
+    mutex_unlock(&smv->smv_mutex);
+    return error;
 }

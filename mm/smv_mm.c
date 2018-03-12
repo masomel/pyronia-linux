@@ -164,20 +164,17 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     dst_ptl = pte_lockptr(mm, dst_pmd);
     spin_lock_nested(dst_ptl, SINGLE_DEPTH_NESTING);
 
-    /* Skip copying pte if two ptes refer to the same page and specify the same access privileges */
+    /* Skip copying pte if two ptes refer to the same page and 
+     * specify the same access privileges */
     if ( !pte_same(*src_pte, *dst_pte) ) {
+      if (pgprot_val(pte_pgprot(*src_pte)) != pgprot_val(pte_pgprot(*dst_pte)))
         page = vm_normal_page(vma, address, *src_pte);       
         /* Update data page statistics */
         if ( page ) {
             init_rss_vec(rss);
             get_page(page);
             page_dup_rmap(page, false);
-            if ( PageAnon(page) ) {
-                rss[MM_ANONPAGES]++;
-            }
-            else{
-                rss[MM_FILEPAGES]++;
-            }
+	    rss[mm_counter(page)]++;
     	    add_mm_rss_vec(mm, rss);
         }
         slog(KERN_INFO, "[%s] src_pte 0x%16lx(smv %d) != dst_pte 0x%16lx (smv %d) for addr 0x%16lx\n", __func__, pte_val(*src_pte), src_smv, pte_val(*dst_pte), dst_smv, address);
@@ -185,7 +182,8 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
         slog(KERN_INFO, "[%s] src_pte (smv %d) == dst_pte (smv %d) for addr 0x%16lx\n", __func__, src_smv, dst_smv, address);
     }
 
-    /* Set the actual value to be the same as the source pgtables for destination  */   
+    /* Set the actual value to be the same as the source 
+     * pgtables for destination  */   
     set_pte_at(mm, address, dst_pte, *src_pte);
 
     slog(KERN_INFO, "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n", 

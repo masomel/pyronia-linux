@@ -973,9 +973,8 @@ struct vm_area_struct *vma_merge(struct mm_struct *mm,
              (prev && (prev->vm_flags & VM_MEMDOM)) ||
              (next && (next->vm_flags & VM_MEMDOM))) {
             slog(KERN_INFO, "[%s] smv %d skip merging VM_MEMDOM vma\n", __func__, current->smv_id);
-            slog(KERN_INFO, "[%s] smv %d prev->vm_start: 0x%16lx to prev->vm_end: 0x%16lx, prev->memdom_id: %d\n",
-                   __func__, current->smv_id, prev->vm_start,
-                   prev->vm_end, prev->memdom_id);
+	    if (prev)
+	      slog(KERN_INFO, "[%s] smv %d prev->vm_start: 0x%16lx to prev->vm_end: 0x%16lx, prev->memdom_id: %d\n", __func__, current->smv_id, prev->vm_start, prev->vm_end, prev->memdom_id);
             slog(KERN_INFO, "[%s] smv %d next->vm_start: 0x%16lx to next->vm_end: 0x%16lx, next->memdom_id: %d\n",
                    __func__, current->smv_id, next->vm_start,
                    next->vm_end, next->memdom_id);
@@ -1178,6 +1177,16 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	if (!len)
 		return -EINVAL;
 
+	/* If we're running in an SMV and the user application has registered
+	 * an mmap, ignore the protections we're getting from userspace, 
+	 * and set prot to the current SMV's
+         * page protection for the mmap_memdom_id. 
+	 * This will ensure that any access to memory will trigger
+	 * a page fault. */
+	if (mm->using_smv && current->mmap_memdom_id != -1) {
+            prot = memdom_get_pgprot(current->mmap_memdom_id, current->smv_id);
+	}
+	
 	/*
 	 * Does the application expect PROT_READ to imply PROT_EXEC?
 	 *
@@ -1215,15 +1224,6 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 		pkey = execute_only_pkey(mm);
 		if (pkey < 0)
 			pkey = 0;
-	}
-
-	/* If we're running in an SMV, always ignore the protections 
-	 * we're getting from userspace, and set prot to the current SMV's
-         * page protection for the mmap_memdom_id. 
-	 * This will ensure that any access to memory will trigger
-	 * a page fault. */
-	if (mm->using_smv) {
-            prot = memdom_get_pgprot(current->mmap_memdom_id, current->smv_id);
 	}
 
 	/* Do simple checking here so the lower-level routines won't have

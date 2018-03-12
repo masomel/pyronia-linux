@@ -43,13 +43,13 @@ elif [ $RUN == "1" ];
 then
 
     gcc -g $SRCDIR/memdom_no_privs_fault.c -o $HOME/memdom_no_privs_test -lsmv -lpthread
-    gcc -g $SRCDIR/memdom_grant_revoke_fault.c -o $HOME/memdom_grant_revoke_test -lsmv -lpthread
+    #gcc -g $SRCDIR/memdom_grant_revoke_fault.c -o $HOME/memdom_grant_revoke_test -lsmv -lpthread
     #gcc -g $SRCDIR/memdom_write_fault.c -o $HOME/memdom_write_fault_test -lsmv -lpthread
 
 cd $HOME
 echo "*** Running Page Fault Tests***"
 ./memdom_no_privs_test
-./memdom_grant_revoke_test
+#./memdom_grant_revoke_test
 #./memdom_write_fault_test
 
 fi
