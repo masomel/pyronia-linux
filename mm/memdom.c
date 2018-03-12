@@ -537,7 +537,7 @@ int memdom_mprotect_all_vmas(struct task_struct *tsk, int memdom_id,
         if (vma->memdom_id == memdom_id && vma->vm_flags & VM_MEMDOM) {
 	  error = do_mprotect(tsk, vma->vm_start, vma->vm_end-vma->vm_start,
                      memdom->pgprot[smv_id]);
-	    if (error) {
+          if (error && (error != -EACCES)) {
 	      slog(KERN_INFO, "[%s] Could not mprotect vma starting at 0x%16lx in memdom %d for smv %d: error = %d\n", __func__, vma->vm_start, memdom_id, smv_id, error);
 	      goto out;
 	    }
