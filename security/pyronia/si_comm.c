@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/sched.h>
+#include <linux/net.h>
 
 #include "include/callgraph.h"
 #include "include/si_comm.h"
@@ -32,7 +33,9 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
 {
     struct sk_buff *skb;
     void *msg_head;
-    int rc;
+    int ret;
+    struct msghdr recv_hdr = {};
+    struct kvec recv_vec = {};
 
     // allocate the message memory
     skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
@@ -55,14 +58,14 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
                            0, SI_COMM_C_STACK_REQ);
 
     if (msg_head == NULL) {
-        rc = -ENOMEM;
+        ret = -ENOMEM;
         printk("[%s] genlmsg_put() returned error for %d\n", __func__, pid);
         return 0;
     }
 
     // create the message
-    rc = nla_put_u8(skb, SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
-    if (rc != 0) {
+    ret = nla_put_u8(skb, SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
+    if (ret != 0) {
         printk("[%s] Could not create the message for %d\n", __func__, pid);
         return 0;
     }
@@ -71,13 +74,14 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     genlmsg_end(skb, msg_head);
 
     // send the message
-    rc = nlmsg_unicast(upcall_sock, skb, pid);
-    if (rc != 0) {
+    ret = nlmsg_unicast(upcall_sock, skb, pid);
+    if (ret != 0) {
         printk("[%s] Error sending message to %d\n", __func__, pid);
         return 0;
     }
 
-    // TODO: recv message on upcall_sock here
+    // recv message on upcall_sock here
+    ret = kernel_recvmsg(upcall_sock, &recv_hdr, recv_vec, 1024, 1024, 0);
 
     return 0;
 }
