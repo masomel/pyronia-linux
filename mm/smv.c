@@ -484,36 +484,3 @@ void smv_free_mmap(struct mm_struct *mm, int smv_id){
                 __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
     }
 }
-
-/* Sets the page protection for all member memdoms for the given task 
- * according to its SMV memdom access permissions set in the main 
- * thread (i.e. current) so far. */
-int smv_new_thread_mprotect(struct task_struct *tsk) {
-    int error = 0;
-    struct smv_struct *smv = NULL;
-    struct mm_struct *mm = tsk->mm;
-    int next_memdom = 0;
-
-    mutex_lock(&mm->smv_metadataMutex);
-    smv = current->mm->smv_metadata[tsk->smv_id];
-    mutex_unlock(&mm->smv_metadataMutex);
-
-    if (!smv) {
-        printk(KERN_ERR "[%s] smv %p not found\n", __func__, smv);
-        return -1;
-    }
-
-    mutex_lock(&smv->smv_mutex);
-    do {
-      next_memdom = find_next_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE, next_memdom);
-      error = memdom_mprotect_all_vmas(tsk, next_memdom, tsk->smv_id);
-      if (error) {
-	goto out;
-      }
-      next_memdom++;
-    }
-    while(next_memdom != SMV_ARRAY_SIZE);
- out:
-    mutex_unlock(&smv->smv_mutex);
-    return error;
-}

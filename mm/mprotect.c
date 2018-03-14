@@ -29,6 +29,7 @@
 #include <asm/pgtable.h>
 #include <asm/cacheflush.h>
 #include <asm/tlbflush.h>
+#include <linux/smv.h>
 
 #include "internal.h"
 
@@ -225,7 +226,12 @@ static unsigned long change_protection_range(struct vm_area_struct *vma,
 	unsigned long pages = 0;
 
 	BUG_ON(addr >= end);
-	pgd = pgd_offset(mm, addr);
+	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
+	  pgd = pgd_offset_smv(mm, addr, current->smv_id);
+	}
+	else {
+	  pgd = pgd_offset(mm, addr);
+	}
 	flush_cache_range(vma, addr, end);
 	set_tlb_flush_pending(mm);
 	do {
@@ -352,13 +358,12 @@ fail:
 	return error;
 }
 
-int do_mprotect (struct task_struct *tsk, unsigned long start,
-		 size_t len, unsigned long prot) {
+int do_mprotect (unsigned long start, size_t len, unsigned long prot) {
 	unsigned long nstart, end, tmp, reqprot;
 	struct vm_area_struct *vma, *prev;
 	int error = -EINVAL;
 	const int grows = prot & (PROT_GROWSDOWN|PROT_GROWSUP);
-	const bool rier = (tsk->personality & READ_IMPLIES_EXEC) &&
+	const bool rier = (current->personality & READ_IMPLIES_EXEC) &&
 				(prot & PROT_READ);
 
 	prot &= ~(PROT_GROWSDOWN|PROT_GROWSUP);
@@ -378,10 +383,10 @@ int do_mprotect (struct task_struct *tsk, unsigned long start,
 
 	reqprot = prot;
 
-	if (down_write_killable(&tsk->mm->mmap_sem))
+	if (down_write_killable(&current->mm->mmap_sem))
 		return -EINTR;
 
-	vma = find_vma(tsk->mm, start);
+	vma = find_vma(current->mm, start);
 	error = -ENOMEM;
 	if (!vma)
 		goto out;
@@ -418,7 +423,7 @@ int do_mprotect (struct task_struct *tsk, unsigned long start,
 
 		newflags = calc_vm_prot_bits(prot, pkey);
 		newflags |= (vma->vm_flags & ~(VM_READ | VM_WRITE | VM_EXEC));
-
+		
 		/* newflags >> 4 shift VM_MAY% in place of VM_% */
 		if ((newflags & ~(newflags >> 4)) & (VM_READ | VM_WRITE | VM_EXEC)) {
 			error = -EACCES;
@@ -450,11 +455,11 @@ int do_mprotect (struct task_struct *tsk, unsigned long start,
 		prot = reqprot;
 	}
 out:
-	up_write(&tsk->mm->mmap_sem);
+	up_write(&current->mm->mmap_sem);
 	return error;
 }
 
 SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
 		unsigned long, prot) {
-  return do_mprotect(current, start, len, prot);
+  return do_mprotect(start, len, prot);
 }

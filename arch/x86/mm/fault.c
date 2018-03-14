@@ -1130,7 +1130,7 @@ access_error(unsigned long error_code, struct vm_area_struct *vma)
 
 	/* Make sure we return no error if the vma is memdom protected */
 	if (vma->vm_flags & VM_MEMDOM) {
-	  slog(KERN_INFO, "[%s] this VMA is memdom protected, checking if valid SMV fault with error code %lu\n", __func__, error_code);
+	  slog(KERN_INFO, "[%s] vma starting at 0x%16lx is memdom protected, checking if valid SMV fault with error code %lu\n", __func__, vma->vm_start, error_code);
 	  return 0;
 	}
 	

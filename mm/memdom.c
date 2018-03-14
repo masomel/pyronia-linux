@@ -42,7 +42,7 @@ static inline unsigned long memdom_privs_to_pgprot(int privs) {
         vm_prot |= PROT_WRITE;
     }
     if( privs & MEMDOM_EXECUTE ) {
-        vm_prot |= PROT_EXEC;
+        vm_prot |= PROT_READ;
     }
     if( privs & MEMDOM_ALLOCATE ) {
         vm_prot |= PROT_WRITE;
@@ -256,10 +256,7 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
 
     // only re-mprotect here if the main thread is changing its own privileges
     // to a memdom. Other SMV's privileges will be set in do_fork.
-    if (smv_id == MAIN_THREAD)
-      return memdom_mprotect_all_vmas(current, memdom_id, smv_id);
-    
-    return 0;
+    return memdom_mprotect_all_vmas(memdom_id, smv_id);
 }
 EXPORT_SYMBOL(memdom_priv_add);
 
@@ -318,10 +315,7 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
 
     // only re-mprotect here if the main thread is changing its own privileges
     // to a memdom. Other SMV's privileges will be set in do_fork.
-    if (smv_id == MAIN_THREAD)
-      return memdom_mprotect_all_vmas(current, memdom_id, smv_id);
-    
-    return 0;
+    return memdom_mprotect_all_vmas(memdom_id, smv_id);
 }
 EXPORT_SYMBOL(memdom_priv_del);
 
@@ -514,18 +508,17 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
 /* mprotect all vmas belonging to the memdom_id using the
  * memdom's page protection value for the given smv.
 */
-int memdom_mprotect_all_vmas(struct task_struct *tsk, int memdom_id,
-			     int smv_id) {
+int memdom_mprotect_all_vmas(int memdom_id, int smv_id) {
     struct vm_area_struct *vma;
     int error = 0;
     struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
-    struct mm_struct *mm = tsk->mm;
+    struct mm_struct *mm = current->mm;
 
-    mutex_lock(&(current->mm)->smv_metadataMutex);
+    mutex_lock(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
     memdom = current->mm->memdom_metadata[memdom_id];
-    mutex_unlock(&(current->mm)->smv_metadataMutex);
+    mutex_unlock(&mm->smv_metadataMutex);
 
     if (!memdom || !smv) {
         printk(KERN_ERR "[%s] memdom %p || smv %p not found\n", __func__, memdom, smv);
@@ -535,9 +528,9 @@ int memdom_mprotect_all_vmas(struct task_struct *tsk, int memdom_id,
     mutex_lock(&memdom->memdom_mutex);
     for (vma = mm->mmap; vma ; vma = vma->vm_next) {
         if (vma->memdom_id == memdom_id && vma->vm_flags & VM_MEMDOM) {
-	  error = do_mprotect(tsk, vma->vm_start, vma->vm_end-vma->vm_start,
+	  error = do_mprotect(vma->vm_start, vma->vm_end-vma->vm_start,
                      memdom->pgprot[smv_id]);
-          if (error && (error != -EACCES)) {
+          if (error) {
 	      slog(KERN_INFO, "[%s] Could not mprotect vma starting at 0x%16lx in memdom %d for smv %d: error = %d\n", __func__, vma->vm_start, memdom_id, smv_id, error);
 	      goto out;
 	    }
