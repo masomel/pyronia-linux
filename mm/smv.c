@@ -62,9 +62,9 @@ int smv_main_init(void){
 
     /* make all existing vma in memdom_id: MAIN_THREAD */
     memdom_claim_all_vmas(MAIN_THREAD);
-
     mutex_unlock(&mm->smv_metadataMutex);
-    return 0;
+
+    return memdom_mprotect_all_vmas(memdom_id, smv_id);
 }
 EXPORT_SYMBOL(smv_main_init);
 
