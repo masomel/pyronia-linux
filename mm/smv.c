@@ -64,7 +64,8 @@ int smv_main_init(void){
     memdom_claim_all_vmas(MAIN_THREAD);
     mutex_unlock(&mm->smv_metadataMutex);
 
-    return memdom_mprotect_all_vmas(memdom_id, smv_id);
+    //return memdom_mprotect_all_vmas(memdom_id, smv_id);
+    return 0;
 }
 EXPORT_SYMBOL(smv_main_init);
 

@@ -254,9 +254,11 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
     memdom->pgprot[smv_id] = memdom_privs_to_pgprot(memdom_priv_get_internal(memdom, smv_id));
     mutex_unlock(&memdom->memdom_mutex);
 
-    // only re-mprotect here if the main thread is changing its own privileges
-    // to a memdom. Other SMV's privileges will be set in do_fork.
-    return memdom_mprotect_all_vmas(memdom_id, smv_id);
+    // TODO: mprotect for MAIN_THREAD memdom, too
+    if (smv_id > MAIN_THREAD)
+        return memdom_mprotect_all_vmas(memdom_id, smv_id);
+
+    return 0;
 }
 EXPORT_SYMBOL(memdom_priv_add);
 
@@ -313,9 +315,11 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
     memdom->pgprot[smv_id] = memdom_privs_to_pgprot(memdom_priv_get_internal(memdom, smv_id));
     mutex_unlock(&memdom->memdom_mutex);
 
-    // only re-mprotect here if the main thread is changing its own privileges
-    // to a memdom. Other SMV's privileges will be set in do_fork.
-    return memdom_mprotect_all_vmas(memdom_id, smv_id);
+    // TODO: mprotect for MAIN_THREAD memdom, too
+    if (smv_id > MAIN_THREAD)
+        return memdom_mprotect_all_vmas(memdom_id, smv_id);
+
+    return 0;
 }
 EXPORT_SYMBOL(memdom_priv_del);
 
@@ -464,7 +468,6 @@ int memdom_claim_all_vmas(int memdom_id){
     down_write(&mm->mmap_sem);
     for (vma = mm->mmap; vma; vma = vma->vm_next) {
         vma->memdom_id = MAIN_THREAD;
-        vma->vm_flags |= VM_MEMDOM;
         vma_count++;
     }
     up_write(&mm->mmap_sem);

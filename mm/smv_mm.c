@@ -104,9 +104,6 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
 
     /* Don't copy page table to the main thread */
     if ( dst_smv == MAIN_THREAD ) {
-      // make an exception if this is a COW fault
-      if (src_smv == MAIN_THREAD && flags & FAULT_FLAG_WRITE)
-	goto copy;
       slog(KERN_INFO, "[%s] smv %d attempts to overwrite main thread's page table. Skip\n", __func__, src_smv);
       return 0;
     }

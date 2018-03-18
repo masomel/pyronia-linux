@@ -1183,7 +1183,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
          * page protection for the mmap_memdom_id. 
 	 * This will ensure that any access to memory will trigger
 	 * a page fault. */
-	if (mm->using_smv && current->mmap_memdom_id != -1) {
+	if (mm->using_smv && current->mmap_memdom_id > MAIN_THREAD) {
             prot = memdom_get_pgprot(current->mmap_memdom_id, current->smv_id);
 	}
 	
