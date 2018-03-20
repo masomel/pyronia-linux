@@ -416,10 +416,6 @@ static int allocate_bt(struct mm_struct *mm, long __user *bd_entry)
 	unsigned long bt_addr;
 	unsigned long bd_new_entry;
 	int ret = 0;
-
-	if (current->mm->using_smv) {
-	  printk(KERN_INFO "[%s] handling bounds traps\n", __func__);
-	}
 	
 	/*
 	 * Carve the virtual space out of userspace for the new

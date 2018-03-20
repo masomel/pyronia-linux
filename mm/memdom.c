@@ -42,7 +42,7 @@ static inline unsigned long memdom_privs_to_pgprot(int privs) {
         vm_prot |= PROT_WRITE;
     }
     if( privs & MEMDOM_EXECUTE ) {
-        vm_prot |= PROT_READ;
+        vm_prot |= PROT_EXEC;
     }
     if( privs & MEMDOM_ALLOCATE ) {
         vm_prot |= PROT_WRITE;
@@ -251,12 +251,13 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
         slog(KERN_INFO, "[%s] Added allocate privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }
     // update the page protection for the smv
-    memdom->pgprot[smv_id] = memdom_privs_to_pgprot(memdom_priv_get_internal(memdom, smv_id));
+    if (memdom_id > MAIN_THREAD)
+      memdom->pgprot[smv_id] = memdom_privs_to_pgprot(memdom_priv_get_internal(memdom, smv_id));
     mutex_unlock(&memdom->memdom_mutex);
 
     // TODO: mprotect for MAIN_THREAD memdom, too
-    if (smv_id > MAIN_THREAD)
-        return memdom_mprotect_all_vmas(memdom_id, smv_id);
+    if (memdom_id > MAIN_THREAD)
+      return memdom_mprotect_all_vmas(memdom_id, smv_id, mm);
 
     return 0;
 }
@@ -312,12 +313,13 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
         slog(KERN_INFO, "[%s] Revoked allocate privilege for smv %d in memdmo %d\n", __func__, smv_id, memdom_id);
     }
     // update the page protection for the smv
-    memdom->pgprot[smv_id] = memdom_privs_to_pgprot(memdom_priv_get_internal(memdom, smv_id));
+    if (memdom_id > MAIN_THREAD)
+      memdom->pgprot[smv_id] = memdom_privs_to_pgprot(memdom_priv_get_internal(memdom, smv_id));
     mutex_unlock(&memdom->memdom_mutex);
 
     // TODO: mprotect for MAIN_THREAD memdom, too
-    if (smv_id > MAIN_THREAD)
-        return memdom_mprotect_all_vmas(memdom_id, smv_id);
+    if (memdom_id > MAIN_THREAD)
+      return memdom_mprotect_all_vmas(memdom_id, smv_id, mm);
 
     return 0;
 }
@@ -511,16 +513,21 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
 /* mprotect all vmas belonging to the memdom_id using the
  * memdom's page protection value for the given smv.
 */
-int memdom_mprotect_all_vmas(int memdom_id, int smv_id) {
+int memdom_mprotect_all_vmas(int memdom_id, int smv_id, struct mm_struct *mm) {
     struct vm_area_struct *vma;
     int error = 0;
     struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
-    struct mm_struct *mm = current->mm;
+    unsigned long new_prot;
 
+    if( memdom_id < 0 || memdom_id > LAST_MEMDOM_INDEX ) {
+      printk(KERN_ERR "[%s] Error, out of bound: memdom %d\n", __func__, memdom_id);
+      return -1;
+    }
+    
     mutex_lock(&mm->smv_metadataMutex);
-    smv = current->mm->smv_metadata[smv_id];
-    memdom = current->mm->memdom_metadata[memdom_id];
+    smv = mm->smv_metadata[smv_id];
+    memdom = mm->memdom_metadata[memdom_id];
     mutex_unlock(&mm->smv_metadataMutex);
 
     if (!memdom || !smv) {
@@ -530,9 +537,13 @@ int memdom_mprotect_all_vmas(int memdom_id, int smv_id) {
 
     mutex_lock(&memdom->memdom_mutex);
     for (vma = mm->mmap; vma ; vma = vma->vm_next) {
-        if (vma->memdom_id == memdom_id && vma->vm_flags & VM_MEMDOM) {
+      if (vma->memdom_id == memdom_id && (vma->vm_flags & VM_MEMDOM)) {
+	new_prot = memdom->pgprot[smv_id];
+	if (new_prot & PROT_EXEC) {
+	  new_prot = new_prot ^ PROT_EXEC;
+	}
 	  error = do_mprotect(vma->vm_start, vma->vm_end-vma->vm_start,
-                     memdom->pgprot[smv_id]);
+			      new_prot);
           if (error) {
 	      slog(KERN_INFO, "[%s] Could not mprotect vma starting at 0x%16lx in memdom %d for smv %d: error = %d\n", __func__, vma->vm_start, memdom_id, smv_id, error);
 	      goto out;

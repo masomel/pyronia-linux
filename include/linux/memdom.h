@@ -51,7 +51,7 @@ struct memdom_struct {
 extern void memdom_init(void);
 int memdom_claim_all_vmas(int memdom_id);
 unsigned long memdom_get_pgprot(int memdom_id, int smv_id);
-int memdom_mprotect_all_vmas(int memdom_id, int smv_id);
+int memdom_mprotect_all_vmas(int memdom_id, int smv_id, struct mm_struct *mm);
 
 /// --- Functions exported to user space to manage metadata --- ///
 int memdom_create(void);

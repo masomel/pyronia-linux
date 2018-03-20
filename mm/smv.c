@@ -50,7 +50,7 @@ int smv_main_init(void){
 
     current->smv_id = MAIN_THREAD;       // main thread is using MAIN_THREAD-th (0) smv_id
     current->mmap_memdom_id = MAIN_THREAD;  // main thread is using MAIN_THREAD-th (0) as mmap_id
-
+    
     /* Make the global smv join the global memdom with full privileges */
     smv_join_memdom(memdom_id, smv_id);
     memdom_priv_add(memdom_id, smv_id, MEMDOM_READ | MEMDOM_WRITE | MEMDOM_EXECUTE | MEMDOM_ALLOCATE);
@@ -62,6 +62,7 @@ int smv_main_init(void){
 
     /* make all existing vma in memdom_id: MAIN_THREAD */
     memdom_claim_all_vmas(MAIN_THREAD);
+    
     mutex_unlock(&mm->smv_metadataMutex);
 
     //return memdom_mprotect_all_vmas(memdom_id, smv_id);
@@ -420,6 +421,45 @@ void smv_free_pgd(struct mm_struct *mm, int smv_id){
     free_page((unsigned long)mm->pgd_smv[smv_id]);
 }
 
+static void smv_mprotect_all_vmas(int smv_id, struct mm_struct *mm) {
+  struct smv_struct *smv = NULL;
+  int next_memdom = 1; // TODO: mprotect for MAIN_THREAD memdom, too
+  int mprotect_count = 0;
+  int i;
+  int err;
+  
+  if (smv_id < 0 || smv_id > LAST_SMV_INDEX) {
+    printk(KERN_ERR "[%s] Error, out of bound: smv %d\n", __func__, smv_id);
+    return;
+  }
+  
+  mutex_lock(&mm->smv_metadataMutex);
+  smv = mm->smv_metadata[smv_id];
+  mutex_unlock(&mm->smv_metadataMutex);
+  
+  if (!smv) {
+    printk(KERN_ERR "[%s] smv %p does not exist.\n", __func__, smv);
+    return;
+  }
+  
+  mutex_lock(&smv->smv_mutex);
+  for (i = 0; i < atomic_read(&mm->num_memdoms); i++){
+    next_memdom = find_next_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE, next_memdom);
+    if (next_memdom > LAST_SMV_INDEX)
+      break;
+    err = memdom_mprotect_all_vmas(next_memdom, smv_id, mm);
+    if (!err)
+      mprotect_count++;
+    else
+      slog(KERN_ERR, "[%s] Could not mprotect vmas for smv %d in memdom %d\n", __func__, smv_id, next_memdom);
+    next_memdom += 1; // increment for next iteration
+  }
+  mutex_unlock(&smv->smv_mutex);
+  
+  if (!err)
+    slog(KERN_INFO, "[%s] Re-mprotected vmas for smv %d in %d memdoms\n", __func__, smv_id, mprotect_count);
+}
+
 /* Hook for security context switch from one smv to another (change secure memory view)
  */
 void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
@@ -431,6 +471,10 @@ void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
          next_mm == NULL) {
         return;
     }
+
+    slog(KERN_INFO, "[%s] switching from smv %d (using smv? %d) to smv %d\n", __func__, prev_tsk->smv_id, prev_mm->using_smv, next_tsk->smv_id);
+    
+    smv_mprotect_all_vmas(next_tsk->smv_id, next_mm);
 }
 
 /* See implementation in memory.c */

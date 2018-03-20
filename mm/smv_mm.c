@@ -31,7 +31,7 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     /* Get this smv's privileges */
     privs = memdom_priv_get(memdom_id, smv_id);
 
-    slog(KERN_INFO, "[%s] the error code: %lu\n", __func__, error_code);
+    slog(KERN_INFO, "[%s] error code: %lu\n", __func__, error_code);
     
     /* Protection fault */
     if ( error_code & PF_PROT ) {
@@ -118,7 +118,6 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
         return 0;
     }
 
- copy:
     /* SMP protection */
     mutex_lock(&mm->smv_metadataMutex);
 
@@ -168,7 +167,12 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
             init_rss_vec(rss);
             get_page(page);
             page_dup_rmap(page, false);
-	    rss[mm_counter(page)]++;
+	    if ( PageAnon(page) ) {
+	      rss[MM_ANONPAGES]++;
+	    }
+	    else{
+	      rss[MM_FILEPAGES]++;
+	    }
     	    add_mm_rss_vec(mm, rss);
         }
         slog(KERN_INFO, "[%s] src_pte 0x%16lx(smv %d) != dst_pte 0x%16lx (smv %d) for addr 0x%16lx\n", __func__, pte_val(*src_pte), src_smv, pte_val(*dst_pte), dst_smv, address);

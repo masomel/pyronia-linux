@@ -2171,8 +2171,6 @@ static int wp_page_copy(struct fault_env *fe, pte_t orig_pte,
 	struct mem_cgroup *memcg;
 
 	if (unlikely(anon_vma_prepare(vma))) {
-	  if (current->mm->using_smv)
-	    slog(KERN_INFO, "[%s] anon_vma_prepare\n", __func__);
 	  goto oom;
 	}
 
@@ -2280,8 +2278,6 @@ static int wp_page_copy(struct fault_env *fe, pte_t orig_pte,
 		}
 		put_page(old_page);
 	}
-	if (current->mm->using_smv)
-	  slog(KERN_INFO, "[%s] copied page? %d\n", __func__, page_copied);
 	return page_copied ? VM_FAULT_WRITE : 0;
 oom_free_new:
 	put_page(new_page);
@@ -2439,15 +2435,11 @@ static int do_wp_page(struct fault_env *fe, pte_t orig_pte)
 				page_move_anon_rmap(old_page, vma);
 			}
 			unlock_page(old_page);
-			if (current->mm->using_smv)
-			  slog(KERN_INFO, "[%s] page reuse case\n", __func__);
 			return wp_page_reuse(fe, orig_pte, old_page, 0, 0);
 		}
 		unlock_page(old_page);
 	} else if (unlikely((vma->vm_flags & (VM_WRITE|VM_SHARED)) ==
 					(VM_WRITE|VM_SHARED))) {
-	  if (current->mm->using_smv)
-	    slog(KERN_INFO, "[%s] page shared case\n", __func__);
 	  return wp_page_shared(fe, orig_pte, old_page);
 	}
 
@@ -3704,26 +3696,26 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
                handle_pte_fault succeeds (this includes a page fault
 	       where the pte was allocated or cowed). MAIN_THREAD will return
                immediately as it doesn't have to copy its own pgtables. */
-            if (rv == 0 || rv == VM_FAULT_NOPAGE || rv == VM_FAULT_WRITE) {
-                /* FIXME: just pass pte to copy_pgtable_smv? */
-                copy_pgtable_smv(current->smv_id, MAIN_THREAD,
-                                 address, fe.flags, vma);
-            }
+	  if (rv == 0 || rv == VM_FAULT_NOPAGE/* || rv == VM_FAULT_WRITE*/) {
+	    /* FIXME: just pass pte to copy_pgtable_smv? */
+	    copy_pgtable_smv(current->smv_id, MAIN_THREAD,
+			     address, fe.flags, vma);
+	  }
 
-            if (rv == 0 || rv == VM_FAULT_NOPAGE || rv == VM_FAULT_WRITE) {
-	      slog(KERN_INFO, "[%s] addr 0x%16lx done\n", __func__, address);
-            }
-            else {
-	      slog(KERN_INFO, "[%s] addr 0x%16lx failed with return value %d\n", __func__, address, rv);
-            }
-            if ( current->smv_id == MAIN_THREAD) {
-                slog(KERN_INFO, "[%s] smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx\n",
-                     __func__, current->smv_id, pgd_val(*pgd), pud_val(*pud), pmd_val(*fe.pmd));
-            }
-            slog(KERN_INFO, "[%s] cr3: 0x%16lx, smv %d: mm->pgd: %p, mm->pgd_smv[%d]: %p, mm->pgd_smv[MAIN_THREAD]: %p\n",
-                 __func__, read_cr3(), current->smv_id, mm->pgd,
-                 current->smv_id, mm->pgd_smv[current->smv_id],
-                 mm->pgd_smv[MAIN_THREAD]);
+	  if (rv == 0 || rv == VM_FAULT_NOPAGE/* || rv == VM_FAULT_WRITE*/) {
+	    slog(KERN_INFO, "[%s] addr 0x%16lx done\n", __func__, address);
+	  }
+	  else {
+	    slog(KERN_INFO, "[%s] addr 0x%16lx failed with return value %d\n", __func__, address, rv);
+	  }
+	  if ( current->smv_id == MAIN_THREAD) {
+	    slog(KERN_INFO, "[%s] smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx\n",
+		 __func__, current->smv_id, pgd_val(*pgd), pud_val(*pud), pmd_val(*fe.pmd));
+	  }
+	  slog(KERN_INFO, "[%s] cr3: 0x%16lx, smv %d: mm->pgd: %p, mm->pgd_smv[%d]: %p, mm->pgd_smv[MAIN_THREAD]: %p\n",
+	       __func__, read_cr3(), current->smv_id, mm->pgd,
+	       current->smv_id, mm->pgd_smv[current->smv_id],
+	       mm->pgd_smv[MAIN_THREAD]);
 	}
         return rv;
 }
