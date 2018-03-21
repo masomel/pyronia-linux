@@ -257,7 +257,7 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
 
     // TODO: mprotect for MAIN_THREAD memdom, too
     if (memdom_id > MAIN_THREAD)
-      return memdom_mprotect_all_vmas(memdom_id, smv_id, mm);
+      return memdom_mprotect_all_vmas(current, mm, memdom_id, smv_id);
 
     return 0;
 }
@@ -319,7 +319,7 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
 
     // TODO: mprotect for MAIN_THREAD memdom, too
     if (memdom_id > MAIN_THREAD)
-      return memdom_mprotect_all_vmas(memdom_id, smv_id, mm);
+      return memdom_mprotect_all_vmas(current, mm, memdom_id, smv_id);
 
     return 0;
 }
@@ -510,10 +510,15 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
     return prot;
 }
 
+/* Defined in mprotect.c */
+extern int do_mprotect (struct task_struct *tsk, unsigned long start,
+		 size_t len, unsigned long prot);
+
 /* mprotect all vmas belonging to the memdom_id using the
  * memdom's page protection value for the given smv.
 */
-int memdom_mprotect_all_vmas(int memdom_id, int smv_id, struct mm_struct *mm) {
+int memdom_mprotect_all_vmas(struct task_struct *tsk, struct mm_struct *mm,
+			     int memdom_id, int smv_id) {
     struct vm_area_struct *vma;
     int error = 0;
     struct smv_struct *smv = NULL;
@@ -542,12 +547,15 @@ int memdom_mprotect_all_vmas(int memdom_id, int smv_id, struct mm_struct *mm) {
 	if (new_prot & PROT_EXEC) {
 	  new_prot = new_prot ^ PROT_EXEC;
 	}
-	  error = do_mprotect(vma->vm_start, vma->vm_end-vma->vm_start,
+	error = do_mprotect(tsk, vma->vm_start, vma->vm_end-vma->vm_start,
 			      new_prot);
           if (error) {
 	      slog(KERN_INFO, "[%s] Could not mprotect vma starting at 0x%16lx in memdom %d for smv %d: error = %d\n", __func__, vma->vm_start, memdom_id, smv_id, error);
 	      goto out;
-	    }
+	  }
+	  else {
+	    slog(KERN_INFO, "[%s] New page protection for vma starting at 0x%16lx in memdom %d for smv %d = %lu\n", __func__, vma->vm_start, memdom_id, smv_id, (pgprot_val(vma->vm_page_prot)&(PROT_READ|PROT_WRITE|PROT_EXEC)));
+	  }
         }
     }
  out:

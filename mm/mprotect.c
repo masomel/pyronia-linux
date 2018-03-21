@@ -226,7 +226,7 @@ static unsigned long change_protection_range(struct vm_area_struct *vma,
 	unsigned long pages = 0;
 
 	BUG_ON(addr >= end);
-	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
+	if (mm->using_smv && current->smv_id > MAIN_THREAD) {
 	  pgd = pgd_offset_smv(mm, addr, current->smv_id);
 	}
 	else {
@@ -358,12 +358,13 @@ fail:
 	return error;
 }
 
-int do_mprotect (unsigned long start, size_t len, unsigned long prot) {
+int do_mprotect (struct task_struct *tsk, unsigned long start,
+		 size_t len, unsigned long prot) {
 	unsigned long nstart, end, tmp, reqprot;
 	struct vm_area_struct *vma, *prev;
 	int error = -EINVAL;
 	const int grows = prot & (PROT_GROWSDOWN|PROT_GROWSUP);
-	const bool rier = (current->personality & READ_IMPLIES_EXEC) &&
+	const bool rier = (tsk->personality & READ_IMPLIES_EXEC) &&
 				(prot & PROT_READ);
 
 	prot &= ~(PROT_GROWSDOWN|PROT_GROWSUP);
@@ -383,10 +384,10 @@ int do_mprotect (unsigned long start, size_t len, unsigned long prot) {
 
 	reqprot = prot;
 
-	if (down_write_killable(&current->mm->mmap_sem))
+	if (down_write_killable(&tsk->mm->mmap_sem))
 		return -EINTR;
 
-	vma = find_vma(current->mm, start);
+	vma = find_vma(tsk->mm, start);
 	error = -ENOMEM;
 	if (!vma)
 		goto out;
@@ -455,11 +456,11 @@ int do_mprotect (unsigned long start, size_t len, unsigned long prot) {
 		prot = reqprot;
 	}
 out:
-	up_write(&current->mm->mmap_sem);
+	up_write(&tsk->mm->mmap_sem);
 	return error;
 }
 
 SYSCALL_DEFINE3(mprotect, unsigned long, start, size_t, len,
 		unsigned long, prot) {
-  return do_mprotect(start, len, prot);
+  return do_mprotect(current, start, len, prot);
 }
