@@ -15,6 +15,8 @@
 #include "include/callgraph.h"
 #include "include/si_comm.h"
 
+#define MAX_RECV_LEN 1024
+
 struct sock *upcall_sock = NULL;
 
 /* family definition */
@@ -34,13 +36,14 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     struct sk_buff *skb;
     void *msg_head;
     int ret;
-    struct msghdr recv_hdr = {};
-    struct kvec recv_vec = {};
+    struct msghdr recv_hdr;
+    struct kvec recv_vec;
+    char *recv_buf[MAX_RECV_LEN];
 
     // allocate the message memory
     skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
     if (skb == NULL) {
-        printk("[%s] Could not allocate skb for STACK_REQ for %d\n",
+        printk(KERN_ERR "[%s] Could not allocate skb for STACK_REQ for %d\n",
                __func__, pid);
         return 0;
     }
@@ -66,7 +69,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     // create the message
     ret = nla_put_u8(skb, SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
     if (ret != 0) {
-        printk("[%s] Could not create the message for %d\n", __func__, pid);
+        printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, pid);
         return 0;
     }
 
@@ -81,9 +84,21 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     }
 
     // recv message on upcall_sock here
-    ret = kernel_recvmsg(upcall_sock, &recv_hdr, recv_vec, 1024, 1024, 0);
+    recv_vec.iov_base = recv_buf;
+    recv_vec.iov_len = MAX_RECV_LEN;
+    recv_hdr.msg_iov = &recv_vec;
+    recv_hdr.msg_iovlen = 1;
 
-    return 0;
+    ret = kernel_recvmsg(upcall_sock, &recv_hdr, &recv_vec, MAX_RECV_LEN, MAX_RECV_LEN, 0);
+
+    if (ret < 0) {
+        printk(KERN_ERR "[%s] Error receiving response from user space: %d\n", __func__, ret);
+        ret = -1;
+    }
+
+    printk();
+
+    return ret;
 }
 
 /* REGISTER_PROC command: receive a message with a process' PID. This
@@ -91,14 +106,37 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
  * the kernel to request callstack information from the process
  * upon sensitive system calls.
  */
-int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
+static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
 {
+    struct nlattr *na;
+    char * mydata = NULL;
+
+    if (info == NULL)
+        goto out;
+
+    /*for each attribute there is an index in info->attrs which points
+     * to a nlattr structure in this structure the data is given */
+    na = info->attrs[SI_COMM_A_USR_MSG];
+    if (na) {
+        mydata = (char *)nla_data(na);
+        if (mydata == NULL)
+            printk(KERN_ERR "[smv_netlink.c] error while receiving data\n");
+    }
+    else
+        printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
+
+    /* Parse the received message here */
+    printk(KERN_INFO "[%s] userspace trying to register port ID: %s; is equal to snd_portid? %d\n", __func__, mydata, (info->snd_portid == simple_strtol(mydata) ? 1 : 0));
+    return 0;
+
+ out:
+    printk(KERN_ERR "[%s] Error with sender info\n", __func__);
     return 0;
 }
 
 /* SAVE_CONTEXT command: receive a message with callstack information
  * to store in the specified process' Pyronia ACL. */
-int pyr_save_context(struct sk_buff *skb,  struct genl_info *info)
+static int pyr_save_context(struct sk_buff *skb,  struct genl_info *info)
 {
     return 0;
 }
@@ -127,18 +165,18 @@ static int __init kernel_comm_init(void)
 {
     int rc;
 
-    /*register new family*/
-    rc = genl_register_family_with_ops(&si_comm_gnl_family, si_comm_gnl_ops);
-    if (rc != 0){
-        printk("register ops: %i\n",rc);
-        goto fail;
-    }
-
     /* initialize the upcall socket */
     struct netlink_kernel_cfg cfg = {};
     upcall_sock = netlink_kernel_create(&init_net, NETLINK_GENERIC, &cfg);
     if (!upcall_sock) {
         printk("upcall socket create\n");
+        goto fail;
+    }
+
+    /*register new family*/
+    rc = genl_register_family_with_ops(&si_comm_gnl_family, si_comm_gnl_ops);
+    if (rc != 0){
+        printk("register ops: %i\n",rc);
         goto fail;
     }
 
@@ -161,6 +199,7 @@ static void __exit kernel_comm_exit(void)
         printk("unregister family %i\n",ret);
     }
 
+    netlink_kernel_release(upcall_sock);
     printk(KERN_INFO "[pyronia] SI channel teardown complete\n");
 }
 

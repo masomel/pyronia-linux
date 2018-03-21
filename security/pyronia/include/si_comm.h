@@ -44,7 +44,5 @@ struct nla_policy si_comm_genl_policy[] = {
 };
 
 pyr_cg_node_t *pyr_stack_request(u32);
-int pyr_register_proc(struct sk_buff *,  struct genl_info *);
-int pyr_save_context(struct sk_buff *,  struct genl_info *);
 
 #endif /* __PYR_SI_COMM_H */
