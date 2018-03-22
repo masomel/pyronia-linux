@@ -6,14 +6,14 @@
  */
 
 #include <net/genetlink.h>
+#include <net/sock.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/net.h>
-
-#include "include/callgraph.h"
-#include "include/si_comm.h"
+#include <uapi/linux/pyronia_netlink.h>
+#include <uapi/linux/pyronia_mac.h>
 
 #define MAX_RECV_LEN 1024
 
@@ -109,12 +109,12 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     }
 
     // recv message on upcall_sock here
-    recv_vec.iov_base = recv_buf;
+    /*    recv_vec.iov_base = recv_buf;
     recv_vec.iov_len = MAX_RECV_LEN;
     recv_hdr.msg_iov = &recv_vec;
-    recv_hdr.msg_iovlen = 1;
+    recv_hdr.msg_iovlen = 1;*/
 
-    ret = kernel_recvmsg(upcall_sock, &recv_hdr, &recv_vec, MAX_RECV_LEN, MAX_RECV_LEN, 0);
+    ret = sk_wait_data(upcall_sock, &timeo, last);
 
     if (ret < 0) {
         printk(KERN_ERR "[%s] Error receiving response from user space: %d\n", __func__, ret);
@@ -138,8 +138,9 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
 {
     struct nlattr *na;
     char * mydata = NULL;
-    int ret;
     int valid_pid = 0;
+    int err = 0;
+    u32 snd_port;
 
     if (info == NULL)
         goto out;
@@ -159,7 +160,11 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     /* Parse the received message here */
     printk(KERN_INFO "[%s] userspace trying to register port ID: %s\n", __func__, mydata);
 
-    valid_pid = info->snd_portid == simple_strtol(mydata) ? 1 : 0;
+    err = kstrtou32(mydata, 10, &snd_port);
+    if (err)
+      return -1;
+
+    valid_pid = info->snd_portid == snd_port ? 1 : 0;
 
     if (valid_pid) {
         // TODO: Save the port ID in the corresponding process' AA policy
@@ -168,6 +173,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     /* This serves as an ACK from the kernel */
     ret = send_to_runtime(genl_info_net(info), info->snd_portid, SI_COMM_C_REGISTER_PROC,
                           SI_COMM_A_USR_MSG, !valid_pid);
+    return 0;
 
  out:
     printk(KERN_ERR "[%s] Error with sender info\n", __func__);
@@ -205,12 +211,15 @@ static int __init kernel_comm_init(void)
 {
     int rc;
 
-    /* initialize the upcall socket */
-    struct netlink_kernel_cfg cfg = {};
-    upcall_sock = netlink_kernel_create(&init_net, NETLINK_GENERIC, &cfg);
+    upcall_sock = init_net.genl_sock;
     if (!upcall_sock) {
         printk("upcall socket create\n");
-        goto fail;
+	struct netlink_kernel_cfg cfg = {
+	  .flags = NL_CFG_F_NONROOT_RECV,
+	};
+	upcall_sock = netlink_kernel_create(&init_net, NETLINK_GENERIC, &cfg);
+	if (!upcall_sock)
+	  goto fail;
     }
 
     /*register new family*/
@@ -239,7 +248,6 @@ static void __exit kernel_comm_exit(void)
         printk("unregister family %i\n",ret);
     }
 
-    netlink_kernel_release(upcall_sock);
     printk(KERN_INFO "[pyronia] SI channel teardown complete\n");
 }
 
