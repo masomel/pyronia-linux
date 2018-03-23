@@ -28,24 +28,18 @@ static struct genl_family si_comm_gnl_family = {
     .maxattr = SI_COMM_A_MAX,
 };
 
-/* STACK_REQ command: send a message requesting the current language
- * runtime's callstack from the given process, and return the callgraph
- * to the caller. */
-pyr_cg_node_t *pyr_stack_request(u32 pid)
-{
+static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr, int msg) {
     struct sk_buff *skb;
     void *msg_head;
-    int ret;
-    struct msghdr recv_hdr;
-    struct kvec recv_vec;
-    char *recv_buf[MAX_RECV_LEN];
+    int ret = -1;
+    char buf[12];
 
-    // allocate the message memory
+     // allocate the message memory
     skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
     if (skb == NULL) {
-        printk(KERN_ERR "[%s] Could not allocate skb for STACK_REQ for %d\n",
-               __func__, pid);
-        return 0;
+        printk(KERN_ERR "[%s] Could not allocate skb for cmd message %d for port %d\n",
+               __func__, cmd, port_id);
+        goto out;
     }
 
     //Create the message headers
@@ -58,29 +52,60 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
        u8 command index (why do we need this?)
     */
     msg_head = genlmsg_put(skb, 0, 0, &si_comm_gnl_family,
-                           0, SI_COMM_C_STACK_REQ);
+                           0, cmd);
 
     if (msg_head == NULL) {
         ret = -ENOMEM;
-        printk("[%s] genlmsg_put() returned error for %d\n", __func__, pid);
-        return 0;
+        printk("[%s] genlmsg_put() returned error for %d\n", __func__, port_id);
+        goto out;
     }
 
-    // create the message
-    ret = nla_put_u8(skb, SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
-    if (ret != 0) {
-        printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, pid);
-        return 0;
+    if (cmd == SI_COMM_C_STACK_REQ && attr == SI_COMM_A_KERN_REQ) {
+        // create the message
+        ret = nla_put_u8(skb, attr, STACK_REQ_CMD);
+        if (ret != 0) {
+            printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, port_id);
+            goto out;
+        }
+    }
+    else {
+        sprintf(buf, "%d", msg);
+        ret = nla_put_string(skb, SI_COMM_A_USR_MSG, buf);
+        if (ret != 0)
+            goto out;
     }
 
     // finalize the message
     genlmsg_end(skb, msg_head);
 
     // send the message
-    ret = nlmsg_unicast(upcall_sock, skb, pid);
+    ret = nlmsg_unicast(nl_sock, skb, port_id);
     if (ret != 0) {
-        printk("[%s] Error sending message to %d\n", __func__, pid);
-        return 0;
+        printk("[%s] Error sending message to %d\n", __func__, port_id);
+        goto out;
+    }
+
+ out:
+    if (ret) {
+        // TODO: release the kraken here
+    }
+    return ret;
+}
+
+/* STACK_REQ command: send a message requesting the current language
+ * runtime's callstack from the given process, and return the callgraph
+ * to the caller. */
+pyr_cg_node_t *pyr_stack_request(u32 pid)
+{
+    int ret;
+    struct msghdr recv_hdr;
+    struct kvec recv_vec;
+    char *recv_buf[MAX_RECV_LEN];
+
+    ret = send_to_runtime(upcall_sock, pid, SI_COMM_C_STACK_REQ,
+                          SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
+    if (ret) {
+        goto out;
     }
 
     // recv message on upcall_sock here
@@ -94,11 +119,14 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     if (ret < 0) {
         printk(KERN_ERR "[%s] Error receiving response from user space: %d\n", __func__, ret);
         ret = -1;
+        goto out;
     }
 
-    printk();
+    printk(KERN_INFO "[%s] Received %d bytes from the runtime at port %d\n", __func__,
+           ret, pid);
 
-    return ret;
+ out:
+    return NULL;
 }
 
 /* REGISTER_PROC command: receive a message with a process' PID. This
@@ -110,6 +138,8 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
 {
     struct nlattr *na;
     char * mydata = NULL;
+    int ret;
+    int valid_pid = 0;
 
     if (info == NULL)
         goto out;
@@ -117,6 +147,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     /*for each attribute there is an index in info->attrs which points
      * to a nlattr structure in this structure the data is given */
     na = info->attrs[SI_COMM_A_USR_MSG];
+    // TODO: Need to check here that the command we received was a REG_PROC
     if (na) {
         mydata = (char *)nla_data(na);
         if (mydata == NULL)
@@ -126,8 +157,17 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
         printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
 
     /* Parse the received message here */
-    printk(KERN_INFO "[%s] userspace trying to register port ID: %s; is equal to snd_portid? %d\n", __func__, mydata, (info->snd_portid == simple_strtol(mydata) ? 1 : 0));
-    return 0;
+    printk(KERN_INFO "[%s] userspace trying to register port ID: %s\n", __func__, mydata);
+
+    valid_pid = info->snd_portid == simple_strtol(mydata) ? 1 : 0;
+
+    if (valid_pid) {
+        // TODO: Save the port ID in the corresponding process' AA policy
+    }
+
+    /* This serves as an ACK from the kernel */
+    ret = send_to_runtime(genl_info_net(info), info->snd_portid, SI_COMM_C_REGISTER_PROC,
+                          SI_COMM_A_USR_MSG, !valid_pid);
 
  out:
     printk(KERN_ERR "[%s] Error with sender info\n", __func__);
@@ -150,13 +190,13 @@ static const struct genl_ops si_comm_gnl_ops[] = {
     {
         .cmd = SI_COMM_C_REGISTER_PROC,
         .flags = 0,
-        .policy = si_comm_genl_policy[0],
+        .policy = si_comm_genl_policy,
         .doit = pyr_register_proc,
     },
     {
         .cmd = SI_COMM_C_SAVE_CONTEXT,
         .flags = 0,
-        .policy = si_comm_genl_policy[0],
+        .policy = si_comm_genl_policy,
         .doit = pyr_save_context,
     },
 };
