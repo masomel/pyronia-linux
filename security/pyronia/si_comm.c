@@ -126,7 +126,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
            ret, pid);
 
  out:
-    return NULL;
+    return cg;
 }
 
 /* REGISTER_PROC command: receive a message with a process' PID. This
@@ -171,9 +171,9 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     }
 
     /* This serves as an ACK from the kernel */
-    ret = send_to_runtime(genl_info_net(info), info->snd_portid, SI_COMM_C_REGISTER_PROC,
-                          SI_COMM_A_USR_MSG, !valid_pid);
-    return 0;
+    err = send_to_runtime(genl_info_net(info)->genl_sock, info->snd_portid,
+                          SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG,
+                          !valid_pid);
 
  out:
     printk(KERN_ERR "[%s] Error with sender info\n", __func__);
