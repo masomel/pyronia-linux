@@ -9,11 +9,14 @@
 #include <net/sock.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <liunux/pid.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/net.h>
 #include <uapi/linux/pyronia_netlink.h>
 #include <uapi/linux/pyronia_mac.h>
+
+#include "../policy.h"
 
 #define MAX_RECV_LEN 1024
 
@@ -28,7 +31,7 @@ static struct genl_family si_comm_gnl_family = {
     .maxattr = SI_COMM_A_MAX,
 };
 
-static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr, int msg) {
+static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr, int msg, int blocking) {
     struct sk_buff *skb;
     void *msg_head;
     int ret = -1;
@@ -79,7 +82,7 @@ static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr,
     genlmsg_end(skb, msg_head);
 
     // send the message
-    ret = nlmsg_unicast(nl_sock, skb, port_id);
+    ret = netlink_unicast(nl_sock, skb, port_id, blocking);
     if (ret != 0) {
         printk("[%s] Error sending message to %d\n", __func__, port_id);
         goto out;
@@ -101,9 +104,10 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     struct msghdr recv_hdr;
     struct kvec recv_vec;
     char *recv_buf[MAX_RECV_LEN];
+    pyr_cg_node_t *cg = NULL;
 
     ret = send_to_runtime(upcall_sock, pid, SI_COMM_C_STACK_REQ,
-                          SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
+                          SI_COMM_A_KERN_REQ, STACK_REQ_CMD, MSG_WAIT);
     if (ret) {
         goto out;
     }
@@ -113,8 +117,6 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     recv_vec.iov_len = MAX_RECV_LEN;
     recv_hdr.msg_iov = &recv_vec;
     recv_hdr.msg_iovlen = 1;*/
-
-    ret = sk_wait_data(upcall_sock, &timeo, last);
 
     if (ret < 0) {
         printk(KERN_ERR "[%s] Error receiving response from user space: %d\n", __func__, ret);
@@ -141,6 +143,8 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     int valid_pid = 0;
     int err = 0;
     u32 snd_port;
+    struct task_struct *tsk;
+    struct pyr_profile *profile;
 
     if (info == NULL)
         goto out;
@@ -167,16 +171,27 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     valid_pid = info->snd_portid == snd_port ? 1 : 0;
 
     if (valid_pid) {
-        // TODO: Save the port ID in the corresponding process' AA policy
+        // TODO: Can the port ID ever be different that the PID?
+        tsk = pid_task(find_vpid(snd_port), PIDTYPE_PID);
+        if (!tsk) {
+            valid_pid = 0;
+            goto out;
+        }
+        profile = pyr_get_task_profile(tsk);
+        if (!profile) {
+            valid_pid = 0;
+            goto out;
+        }
+        profile->port_id = snd_port;
     }
 
+ out:
     /* This serves as an ACK from the kernel */
     err = send_to_runtime(genl_info_net(info)->genl_sock, info->snd_portid,
                           SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG,
-                          !valid_pid);
-
- out:
-    printk(KERN_ERR "[%s] Error with sender info\n", __func__);
+                          !valid_pid, MSG_NOWAIT);
+    if (err)
+        printk(KERN_ERR "[%s] Error with sender info\n", __func__);
     return 0;
 }
 
