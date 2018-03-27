@@ -100,32 +100,32 @@ static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr,
  * to the caller. */
 pyr_cg_node_t *pyr_stack_request(u32 pid)
 {
-    int ret;
+    int err;
     struct msghdr recv_hdr;
     struct kvec recv_vec;
     char *recv_buf[MAX_RECV_LEN];
     pyr_cg_node_t *cg = NULL;
 
-    ret = send_to_runtime(upcall_sock, pid, SI_COMM_C_STACK_REQ,
-                          SI_COMM_A_KERN_REQ, STACK_REQ_CMD, MSG_WAIT);
-    if (ret) {
+    err = send_to_runtime(upcall_sock, pid, SI_COMM_C_STACK_REQ,
+                          SI_COMM_A_KERN_REQ, STACK_REQ_CMD, 0);
+    if (err) {
         goto out;
     }
 
     // recv message on upcall_sock here
-    /*    recv_vec.iov_base = recv_buf;
+    recv_vec.iov_base = recv_buf;
     recv_vec.iov_len = MAX_RECV_LEN;
-    recv_hdr.msg_iov = &recv_vec;
-    recv_hdr.msg_iovlen = 1;*/
+    recv_hdr.msg_iter.kvec = &recv_vec;
+    err = sk->sk_prot->recvmsg(sk, &recv_hdr, MAX_RECV_LEN, 0);
 
-    if (ret < 0) {
-        printk(KERN_ERR "[%s] Error receiving response from user space: %d\n", __func__, ret);
-        ret = -1;
-        goto out;
+    if (err < 0) {
+        printk(KERN_ERR "[%s] Receiving response %d from user space at port %d\n", __func__, err, pid);
+        return NULL;
     }
 
-    printk(KERN_INFO "[%s] Received %d bytes from the runtime at port %d\n", __func__,
-           ret, pid);
+    // TODO: parse the callgraph
+
+    printk(KERN_INFO "[%s] Successfully received user response: %s\n", __func__, recv_buf);
 
  out:
     return cg;
@@ -170,7 +170,9 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
 
     valid_pid = info->snd_portid == snd_port ? 1 : 0;
 
-    if (valid_pid) {
+    printk(KERN_INFO "[%s] userspace trying to register port ID: %d; is equal to snd_portid? %d\n", __func__, snd_port, valid_pid);
+
+    /*    if (valid_pid) {
         // TODO: Can the port ID ever be different that the PID?
         tsk = pid_task(find_vpid(snd_port), PIDTYPE_PID);
         if (!tsk) {
@@ -183,7 +185,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
             goto out;
         }
         profile->port_id = snd_port;
-    }
+        }*/
 
  out:
     /* This serves as an ACK from the kernel */
@@ -192,6 +194,10 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
                           !valid_pid, MSG_NOWAIT);
     if (err)
         printk(KERN_ERR "[%s] Error with sender info\n", __func__);
+
+    // FIXME: remove after testing
+    pyr_stack_request(snd_port);
+
     return 0;
 }
 
