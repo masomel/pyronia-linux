@@ -3696,13 +3696,13 @@ static int __handle_mm_fault(struct vm_area_struct *vma,
                handle_pte_fault succeeds (this includes a page fault
 	       where the pte was allocated or cowed). MAIN_THREAD will return
                immediately as it doesn't have to copy its own pgtables. */
-	  if (rv == 0 || rv == VM_FAULT_NOPAGE/* || rv == VM_FAULT_WRITE*/) {
+	  if (rv == 0 || rv == VM_FAULT_NOPAGE || rv == VM_FAULT_WRITE) {
 	    /* FIXME: just pass pte to copy_pgtable_smv? */
 	    copy_pgtable_smv(current->smv_id, MAIN_THREAD,
 			     address, fe.flags, vma);
 	  }
 
-	  if (rv == 0 || rv == VM_FAULT_NOPAGE/* || rv == VM_FAULT_WRITE*/) {
+	  if (rv == 0 || rv == VM_FAULT_NOPAGE || rv == VM_FAULT_WRITE) {
 	    slog(KERN_INFO, "[%s] addr 0x%16lx done\n", __func__, address);
 	  }
 	  else {

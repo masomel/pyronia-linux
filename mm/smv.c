@@ -425,7 +425,6 @@ static inline void smv_mprotect_all_vmas(struct task_struct *tsk,
 				  struct mm_struct *mm, int smv_id) {
   struct smv_struct *smv = NULL;
   int next_memdom = 1; // TODO: mprotect for MAIN_THREAD memdom, too
-  int mprotect_count = 0;
   int i;
   int err;
   
@@ -444,13 +443,14 @@ static inline void smv_mprotect_all_vmas(struct task_struct *tsk,
   }
   
   mutex_lock(&smv->smv_mutex);
-  for (i = 0; i < atomic_read(&mm->num_memdoms); i++){
+  // mprotect for memdom 0, too
+  for (i = 0; i < atomic_read(&mm->num_memdoms)-1; i++){
     next_memdom = find_next_bit(smv->memdom_bitmapJoin, SMV_ARRAY_SIZE, next_memdom);
     if (next_memdom > LAST_SMV_INDEX)
       break;
     err = memdom_mprotect_all_vmas(tsk, mm, next_memdom, smv_id);
-    if (!err)
-      mprotect_count++;
+    if (err)
+      break;
     next_memdom += 1; // increment for next iteration
   }
   mutex_unlock(&smv->smv_mutex);
@@ -471,7 +471,7 @@ void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
         return;
     }
 
-    //slog(KERN_INFO, "[%s] switching from smv %d (using smv? %d) to smv %d\n", __func__, prev_tsk->smv_id, prev_mm->using_smv, next_tsk->smv_id);
+    slog(KERN_INFO, "[%s] switching from smv %d (using smv? %d) to smv %d\n", __func__, prev_tsk->smv_id, prev_mm->using_smv, next_tsk->smv_id);
     
     smv_mprotect_all_vmas(next_tsk, next_mm, next_tsk->smv_id);
 }

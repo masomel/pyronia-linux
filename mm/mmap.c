@@ -1232,7 +1232,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	 */
 	vm_flags |= calc_vm_prot_bits(prot, pkey) | calc_vm_flag_bits(flags) |
 			mm->def_flags | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
-
+	
 	if (flags & MAP_LOCKED)
 		if (!can_do_mlock())
 			return -EPERM;
@@ -1536,15 +1536,17 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	vma->vm_pgoff = pgoff;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
 
+	if (vma->vm_mm->using_smv) {
+	  slog(KERN_INFO, "[%s] vm protection %lu\n",
+	       __func__, pgprot_val(vma->vm_page_prot));
+	}
+	
         /* Set memdom_id correctly.
 	 * User space call memdom_mmap_register to store
          memdom_id for mmap in current */
         if ( vm_flags & VM_MEMDOM ) {
             vma->memdom_id = current->mmap_memdom_id;
             current->mmap_memdom_id = -1; // reset to -1
-            slog(KERN_INFO, "[%s] smv %d allocated vma in memdom %d [0x%16lx - 0x%16lx) with protection %lu\n",
-                   __func__, current->smv_id, vma->memdom_id,
-		 vma->vm_start, vma->vm_end, pgprot_val(vma->vm_page_prot)&(PROT_READ|PROT_WRITE|PROT_EXEC|PROT_NONE));
 	}
         else {
             vma->memdom_id = MAIN_THREAD;
@@ -1624,6 +1626,12 @@ out:
 
 	vma_set_page_prot(vma);
 
+	if (vma->vm_mm->using_smv) {
+	  slog(KERN_INFO, "[%s] smv %d allocated vma in memdom %d [0x%16lx - 0x%16lx) with protection %lu\n",
+                   __func__, current->smv_id, vma->memdom_id,
+		 vma->vm_start, vma->vm_end, pgprot_val(vma->vm_page_prot)&(PROT_READ|PROT_WRITE|PROT_EXEC|PROT_NONE));
+	}
+	
 	return addr;
 
 unmap_and_free_vma:

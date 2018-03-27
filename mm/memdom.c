@@ -42,7 +42,7 @@ static inline unsigned long memdom_privs_to_pgprot(int privs) {
         vm_prot |= PROT_WRITE;
     }
     if( privs & MEMDOM_EXECUTE ) {
-        vm_prot |= PROT_EXEC;
+      //vm_prot |= PROT_EXEC;
     }
     if( privs & MEMDOM_ALLOCATE ) {
         vm_prot |= PROT_WRITE;
@@ -256,7 +256,7 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
     mutex_unlock(&memdom->memdom_mutex);
 
     // TODO: mprotect for MAIN_THREAD memdom, too
-    if (memdom_id > MAIN_THREAD)
+    if (memdom_id > MAIN_THREAD && smv_id == MAIN_THREAD)
       return memdom_mprotect_all_vmas(current, mm, memdom_id, smv_id);
 
     return 0;
@@ -318,7 +318,10 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
     mutex_unlock(&memdom->memdom_mutex);
 
     // TODO: mprotect for MAIN_THREAD memdom, too
-    if (memdom_id > MAIN_THREAD)
+    // only change immediately if the priv changes affect the current thread
+    // (we know the current thread can only be the main thread since others aren't
+    // allowed to get here)
+    if (memdom_id > MAIN_THREAD && smv_id == MAIN_THREAD)
       return memdom_mprotect_all_vmas(current, mm, memdom_id, smv_id);
 
     return 0;
@@ -506,7 +509,7 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
     prot = memdom->pgprot[smv_id];
     mutex_unlock(&memdom->memdom_mutex);
 
-    slog(KERN_INFO, "[%s] smv %d has pgprot %lu iun memdom %d\n", __func__, smv_id, prot, memdom_id);
+    slog(KERN_INFO, "[%s] smv %d has pgprot %lu in memdom %d\n", __func__, smv_id, prot, memdom_id);
     return prot;
 }
 
@@ -523,7 +526,6 @@ int memdom_mprotect_all_vmas(struct task_struct *tsk, struct mm_struct *mm,
     int error = 0;
     struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
-    unsigned long new_prot;
 
     if( memdom_id < 0 || memdom_id > LAST_MEMDOM_INDEX ) {
       printk(KERN_ERR "[%s] Error, out of bound: memdom %d\n", __func__, memdom_id);
@@ -541,24 +543,24 @@ int memdom_mprotect_all_vmas(struct task_struct *tsk, struct mm_struct *mm,
     }
 
     mutex_lock(&memdom->memdom_mutex);
+    down_read(&mm->mmap_sem);
     for (vma = mm->mmap; vma ; vma = vma->vm_next) {
       if (vma->memdom_id == memdom_id && (vma->vm_flags & VM_MEMDOM)) {
-	new_prot = memdom->pgprot[smv_id];
-	if (new_prot & PROT_EXEC) {
-	  new_prot = new_prot ^ PROT_EXEC;
-	}
+	up_read(&mm->mmap_sem);
 	error = do_mprotect(tsk, vma->vm_start, vma->vm_end-vma->vm_start,
-			      new_prot);
-          if (error) {
-	      slog(KERN_INFO, "[%s] Could not mprotect vma starting at 0x%16lx in memdom %d for smv %d: error = %d\n", __func__, vma->vm_start, memdom_id, smv_id, error);
-	      goto out;
-	  }
-	  else {
-	    slog(KERN_INFO, "[%s] New page protection for vma starting at 0x%16lx in memdom %d for smv %d = %lu\n", __func__, vma->vm_start, memdom_id, smv_id, (pgprot_val(vma->vm_page_prot)&(PROT_READ|PROT_WRITE|PROT_EXEC)));
-	  }
-        }
+			    memdom->pgprot[smv_id]);
+	down_read(&mm->mmap_sem);
+	if (error) {
+	  slog(KERN_INFO, "[%s] Could not mprotect vma starting at 0x%16lx in memdom %d for smv %d: error = %d\n", __func__, vma->vm_start, memdom_id, smv_id, error);
+	  goto out;
+	}
+	else {
+	  slog(KERN_INFO, "[%s] New page protection for vma starting at 0x%16lx in memdom %d for smv %d = %lu\n", __func__, vma->vm_start, memdom_id, smv_id, (pgprot_val(vma->vm_page_prot)&(PROT_READ|PROT_WRITE|PROT_EXEC|PROT_NONE)));
+	}
+      }
     }
  out:
+    up_read(&mm->mmap_sem);
     mutex_unlock(&memdom->memdom_mutex);
     return error;
 }

@@ -215,7 +215,8 @@ static inline unsigned long change_pud_range(struct vm_area_struct *vma,
 	return pages;
 }
 
-static unsigned long change_protection_range(struct vm_area_struct *vma,
+static unsigned long change_protection_range(struct task_struct *tsk,
+					     struct vm_area_struct *vma,
 		unsigned long addr, unsigned long end, pgprot_t newprot,
 		int dirty_accountable, int prot_numa)
 {
@@ -226,8 +227,9 @@ static unsigned long change_protection_range(struct vm_area_struct *vma,
 	unsigned long pages = 0;
 
 	BUG_ON(addr >= end);
-	if (mm->using_smv && current->smv_id > MAIN_THREAD) {
-	  pgd = pgd_offset_smv(mm, addr, current->smv_id);
+	if (mm->using_smv && tsk->smv_id >= MAIN_THREAD) {
+	  slog(KERN_INFO, "[%s] for smv %d in memdom %d\n", __func__, tsk->smv_id, vma->memdom_id);
+	  pgd = pgd_offset_smv(mm, addr, tsk->smv_id);
 	}
 	else {
 	  pgd = pgd_offset(mm, addr);
@@ -250,7 +252,9 @@ static unsigned long change_protection_range(struct vm_area_struct *vma,
 	return pages;
 }
 
-unsigned long change_protection(struct vm_area_struct *vma, unsigned long start,
+static unsigned long change_protection_task(struct task_struct *tsk,
+					    struct vm_area_struct *vma,
+					    unsigned long start,
 		       unsigned long end, pgprot_t newprot,
 		       int dirty_accountable, int prot_numa)
 {
@@ -259,13 +263,22 @@ unsigned long change_protection(struct vm_area_struct *vma, unsigned long start,
 	if (is_vm_hugetlb_page(vma))
 		pages = hugetlb_change_protection(vma, start, end, newprot);
 	else
-		pages = change_protection_range(vma, start, end, newprot, dirty_accountable, prot_numa);
+	        pages = change_protection_range(tsk, vma, start, end, newprot, dirty_accountable, prot_numa);
 
 	return pages;
 }
 
-int
-mprotect_fixup(struct vm_area_struct *vma, struct vm_area_struct **pprev,
+unsigned long change_protection(struct vm_area_struct *vma,
+				unsigned long start,
+				unsigned long end, pgprot_t newprot,
+				int dirty_accountable, int prot_numa) {
+  return change_protection_task(current, vma, start, end, newprot,
+				dirty_accountable, prot_numa);
+}
+
+static int mprotect_fixup_task(struct task_struct *tsk,
+			       struct vm_area_struct *vma,
+			       struct vm_area_struct **pprev,
 	unsigned long start, unsigned long end, unsigned long newflags)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -275,7 +288,7 @@ mprotect_fixup(struct vm_area_struct *vma, struct vm_area_struct **pprev,
 	pgoff_t pgoff;
 	int error;
 	int dirty_accountable = 0;
-
+	
 	if (newflags == oldflags) {
 		*pprev = vma;
 		return 0;
@@ -335,8 +348,8 @@ success:
 	vma->vm_flags = newflags;
 	dirty_accountable = vma_wants_writenotify(vma);
 	vma_set_page_prot(vma);
-
-	change_protection(vma, start, end, vma->vm_page_prot,
+	
+	change_protection_task(tsk, vma, start, end, vma->vm_page_prot,
 			  dirty_accountable, 0);
 
 	/*
@@ -356,6 +369,12 @@ success:
 fail:
 	vm_unacct_memory(charged);
 	return error;
+}
+
+int mprotect_fixup(struct vm_area_struct *vma, struct vm_area_struct **pprev,
+	unsigned long start, unsigned long end, unsigned long newflags) {
+	  return mprotect_fixup_task(current, vma, pprev, start, end,
+				     newflags);
 }
 
 int do_mprotect (struct task_struct *tsk, unsigned long start,
@@ -415,13 +434,13 @@ int do_mprotect (struct task_struct *tsk, unsigned long start,
 	for (nstart = start ; ; ) {
 		unsigned long newflags;
 		int pkey = arch_override_mprotect_pkey(vma, prot, -1);
-
+		
 		/* Here we know that vma->vm_start <= nstart < vma->vm_end. */
 
 		/* Does the application expect PROT_READ to imply PROT_EXEC */
 		if (rier && (vma->vm_flags & VM_MAYEXEC))
 			prot |= PROT_EXEC;
-
+		
 		newflags = calc_vm_prot_bits(prot, pkey);
 		newflags |= (vma->vm_flags & ~(VM_READ | VM_WRITE | VM_EXEC));
 		
@@ -438,7 +457,8 @@ int do_mprotect (struct task_struct *tsk, unsigned long start,
 		tmp = vma->vm_end;
 		if (tmp > end)
 			tmp = end;
-		error = mprotect_fixup(vma, &prev, nstart, tmp, newflags);
+		error = mprotect_fixup_task(tsk, vma, &prev, nstart, tmp,
+					    newflags);
 		if (error)
 			goto out;
 		nstart = tmp;
