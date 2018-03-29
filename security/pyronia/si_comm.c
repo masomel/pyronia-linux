@@ -9,14 +9,14 @@
 #include <net/sock.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <liunux/pid.h>
+#include <linux/pid.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/net.h>
 #include <uapi/linux/pyronia_netlink.h>
 #include <uapi/linux/pyronia_mac.h>
 
-#include "../policy.h"
+#include "include/policy.h"
 
 #define MAX_RECV_LEN 1024
 
@@ -31,7 +31,7 @@ static struct genl_family si_comm_gnl_family = {
     .maxattr = SI_COMM_A_MAX,
 };
 
-static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr, int msg, int blocking) {
+static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr, int msg, int nonblocking) {
     struct sk_buff *skb;
     void *msg_head;
     int ret = -1;
@@ -82,11 +82,14 @@ static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr,
     genlmsg_end(skb, msg_head);
 
     // send the message
-    ret = netlink_unicast(nl_sock, skb, port_id, blocking);
-    if (ret != 0) {
-        printk("[%s] Error sending message to %d\n", __func__, port_id);
+    ret = netlink_unicast(nl_sock, skb, port_id, nonblocking);
+    // ret here will contain the length of the sent message (> 0), or
+    // an error (< 0)
+    if (ret < 0) {
+        printk("[%s] Error %d sending message to %d\n", __func__, ret, port_id);
         goto out;
     }
+    ret = 0;
 
  out:
     if (ret) {
@@ -103,9 +106,11 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     int err;
     struct msghdr recv_hdr;
     struct kvec recv_vec;
-    char *recv_buf[MAX_RECV_LEN];
+    char recv_buf[MAX_RECV_LEN];
     pyr_cg_node_t *cg = NULL;
 
+    printk(KERN_INFO "[%s] Requesting callstack from runtime at %d\n", __func__, pid);
+    
     err = send_to_runtime(upcall_sock, pid, SI_COMM_C_STACK_REQ,
                           SI_COMM_A_KERN_REQ, STACK_REQ_CMD, 0);
     if (err) {
@@ -113,10 +118,10 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     }
 
     // recv message on upcall_sock here
-    recv_vec.iov_base = recv_buf;
+    recv_vec.iov_base = &recv_buf;
     recv_vec.iov_len = MAX_RECV_LEN;
     recv_hdr.msg_iter.kvec = &recv_vec;
-    err = sk->sk_prot->recvmsg(sk, &recv_hdr, MAX_RECV_LEN, 0);
+    err = upcall_sock->sk_socket->ops->recvmsg(upcall_sock->sk_socket, &recv_hdr, MAX_RECV_LEN, 0);
 
     if (err < 0) {
         printk(KERN_ERR "[%s] Receiving response %d from user space at port %d\n", __func__, err, pid);
@@ -140,7 +145,6 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
 {
     struct nlattr *na;
     char * mydata = NULL;
-    int valid_pid = 0;
     int err = 0;
     u32 snd_port;
     struct task_struct *tsk;
@@ -162,15 +166,9 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
         printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
 
     /* Parse the received message here */
-    printk(KERN_INFO "[%s] userspace trying to register port ID: %s\n", __func__, mydata);
-
     err = kstrtou32(mydata, 10, &snd_port);
     if (err)
       return -1;
-
-    valid_pid = info->snd_portid == snd_port ? 1 : 0;
-
-    printk(KERN_INFO "[%s] userspace trying to register port ID: %d; is equal to snd_portid? %d\n", __func__, snd_port, valid_pid);
 
     /*    if (valid_pid) {
         // TODO: Can the port ID ever be different that the PID?
@@ -187,13 +185,15 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
         profile->port_id = snd_port;
         }*/
 
+    printk(KERN_INFO "[%s] userspace at port %d registered SI port ID: %d\n", __func__, info->snd_portid, snd_port);
+    
  out:
     /* This serves as an ACK from the kernel */
     err = send_to_runtime(genl_info_net(info)->genl_sock, info->snd_portid,
                           SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG,
-                          !valid_pid, MSG_NOWAIT);
+                          0, MSG_DONTWAIT);
     if (err)
-        printk(KERN_ERR "[%s] Error with sender info\n", __func__);
+      printk(KERN_ERR "[%s] Error responding to runtime: %d\n", __func__, err);
 
     // FIXME: remove after testing
     pyr_stack_request(snd_port);
