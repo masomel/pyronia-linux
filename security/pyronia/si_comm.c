@@ -21,6 +21,8 @@
 #define MAX_RECV_LEN 1024
 
 struct sock *upcall_sock = NULL;
+int runtime_responded = 0;
+char cg_buf[MAX_RECV_LEN];
 
 /* family definition */
 static struct genl_family si_comm_gnl_family = {
@@ -31,7 +33,7 @@ static struct genl_family si_comm_gnl_family = {
     .maxattr = SI_COMM_A_MAX,
 };
 
-static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr, int msg, int nonblocking) {
+static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr, int msg/*, int nonblocking*/) {
     struct sk_buff *skb;
     void *msg_head;
     int ret = -1;
@@ -82,7 +84,7 @@ static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr,
     genlmsg_end(skb, msg_head);
 
     // send the message
-    ret = netlink_unicast(nl_sock, skb, port_id, nonblocking);
+    ret = nlmsg_unicast(nl_sock, skb, port_id);
     // ret here will contain the length of the sent message (> 0), or
     // an error (< 0)
     if (ret < 0) {
@@ -104,33 +106,23 @@ static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr,
 pyr_cg_node_t *pyr_stack_request(u32 pid)
 {
     int err;
-    struct msghdr recv_hdr;
-    struct kvec recv_vec;
-    char recv_buf[MAX_RECV_LEN];
     pyr_cg_node_t *cg = NULL;
 
     printk(KERN_INFO "[%s] Requesting callstack from runtime at %d\n", __func__, pid);
     
     err = send_to_runtime(upcall_sock, pid, SI_COMM_C_STACK_REQ,
-                          SI_COMM_A_KERN_REQ, STACK_REQ_CMD, 0);
+                          SI_COMM_A_KERN_REQ, STACK_REQ_CMD/*, 0*/);
     if (err) {
         goto out;
     }
 
-    // recv message on upcall_sock here
-    recv_vec.iov_base = &recv_buf;
-    recv_vec.iov_len = MAX_RECV_LEN;
-    recv_hdr.msg_iter.kvec = &recv_vec;
-    err = upcall_sock->sk_socket->ops->recvmsg(upcall_sock->sk_socket, &recv_hdr, MAX_RECV_LEN, 0);
-
-    if (err < 0) {
-        printk(KERN_ERR "[%s] Receiving response %d from user space at port %d\n", __func__, err, pid);
-        return NULL;
-    }
+    // TODO: synchronize here bc we might have more than one thread
+    runtime_responded = 0;
+    while(!runtime_responded){}
 
     // TODO: parse the callgraph
 
-    printk(KERN_INFO "[%s] Successfully received user response: %s\n", __func__, recv_buf);
+    printk(KERN_INFO "[%s] Successfully received user response: %s\n", __func__, cg_buf);
 
  out:
     return cg;
@@ -191,14 +183,41 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     /* This serves as an ACK from the kernel */
     err = send_to_runtime(genl_info_net(info)->genl_sock, info->snd_portid,
                           SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG,
-                          0, MSG_DONTWAIT);
+                          0/*, MSG_DONTWAIT*/);
     if (err)
       printk(KERN_ERR "[%s] Error responding to runtime: %d\n", __func__, err);
 
     // FIXME: remove after testing
-    pyr_stack_request(snd_port);
+    //pyr_stack_request(snd_port);
 
     return 0;
+}
+
+static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
+  struct nlattr *na;
+  char * mydata = NULL;
+
+  if (info == NULL)
+    goto out;
+  
+  /*for each attribute there is an index in info->attrs which points
+     * to a nlattr structure in this structure the data is given */
+  na = info->attrs[SI_COMM_A_USR_MSG];
+  // TODO: Need to check here that the command we received was a STACK_REQ
+  if (na) {
+    mydata = (char *)nla_data(na);
+    if (mydata == NULL)
+      printk(KERN_ERR "[smv_netlink.c] error while receiving data\n");
+  }
+  else
+    printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
+
+  memset(cg_buf, 0, MAX_RECV_LEN);
+  memcpy(cg_buf, mydata, MAX_RECV_LEN);
+  runtime_responded = 1;
+
+ out:
+  return 0;
 }
 
 /* SAVE_CONTEXT command: receive a message with callstack information
@@ -225,6 +244,12 @@ static const struct genl_ops si_comm_gnl_ops[] = {
         .flags = 0,
         .policy = si_comm_genl_policy,
         .doit = pyr_save_context,
+    },
+    {
+        .cmd = SI_COMM_C_STACK_REQ,
+        .flags = 0,
+        .policy = si_comm_genl_policy,
+        .doit = pyr_get_callstack,
     },
 };
 
