@@ -19,6 +19,7 @@
 #include "include/path.h"
 #include "include/policy.h"
 #include "include/callgraph.h"
+#include "include/stack_inspector.h"
 
 #ifdef PYR_TESTING
 #if PYR_TESTING
@@ -267,41 +268,6 @@ unsigned int pyr_str_perms(struct pyr_dfa *dfa, unsigned int start,
 }
 
 /**
- * pyr_cg_perms - find the library permission that matches @name
- * @lib_perm_db: library permissions DB to search in
- * @name: string to match in the library permissions DB  (NOT NULL)
- * @lib_perms: Returns - the effective permissions computed from the callgraph @name
- *
- * @lib_perms is set to 0 if computing the permissions fails
- */
-static void pyr_cg_file_perms(struct pyr_lib_policy_db *lib_perm_db,
-                         const char *name, u32 *lib_perms) {
-    pyr_cg_node_t *callgraph = NULL;
-    u32 perms = 0;
-
-    #ifdef PYR_TESTING
-    #if PYR_TESTING
-    if (init_callgraph("cam", &callgraph)) {
-        PYR_ERROR("File - Failed to create callgraph for %s\n", "cam");
-        goto out;
-    }
-    #endif
-    #else
-    // TODO: implement upcall to language runtime for callstack
-    #endif
-
-    if (pyr_compute_lib_perms(lib_perm_db, callgraph,
-                              name, &perms)) {
-        PYR_ERROR("File - Error verifying callgraph for %s\n", "cam");
-        goto out;
-    }
-
- out:
-    pyr_free_callgraph(&callgraph);
-    *lib_perms = perms;
-}
-
-/**
  * is_deleted - test if a file has been completely unlinked
  * @dentry: dentry of file to test for deletion  (NOT NULL)
  *
@@ -355,7 +321,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
         // Pyronia hook: check the call stack to determine
         // if the requesting library has permissions to
         // complete this operation
-        if (!error && !memcmp(profile->base.name, test_prof, strlen(test_prof))) {
+        if (!error && profile->using_pyronia) {
             #ifdef PYR_TESTING
 	  #if PYR_TESTING
             // Move all of these to default policies added by the
@@ -383,16 +349,16 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 lib_perms = request;
             }
             else {
-                // FIXME: msm - support multi-threaded stack tracing
-                pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
+	      pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,
+				    name, &lib_perms);
             }
             #else
-            // FIXME: msm - support multi-threaded stack tracing
-            pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
+            pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,
+				  name, &lib_perms);
 	    #endif
 	    #else
-	    // FIXME: msm - support multi-threaded stack tracing
-            pyr_cg_file_perms(profile->lib_perm_db, name, &lib_perms);
+            pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,
+				  name, &lib_perms);
             #endif
 
             // this checks if the requested permissions are an exact match

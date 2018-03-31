@@ -686,6 +686,8 @@ static struct pyr_profile *unpack_profile(struct pyr_ext *e)
             goto fail;
         }
 #endif
+	profile->port_id = 0;
+	profile->using_pyronia = 0;
 
 	return profile;
 

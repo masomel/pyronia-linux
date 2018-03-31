@@ -12,17 +12,19 @@
 #include <linux/pid.h>
 #include <linux/string.h>
 #include <linux/sched.h>
+#include <linux/delay.h>
 #include <linux/net.h>
 #include <uapi/linux/pyronia_netlink.h>
 #include <uapi/linux/pyronia_mac.h>
 
+#include "include/context.h"
 #include "include/policy.h"
+#include "include/si_comm.h"
+#include "include/stack_inspector.h"
 
-#define MAX_RECV_LEN 1024
+static struct pyr_callstack_request *callstack_req;
 
-struct sock *upcall_sock = NULL;
-int runtime_responded = 0;
-char cg_buf[MAX_RECV_LEN];
+struct mutex pyr_si_mutex;
 
 /* family definition */
 static struct genl_family si_comm_gnl_family = {
@@ -33,7 +35,7 @@ static struct genl_family si_comm_gnl_family = {
     .maxattr = SI_COMM_A_MAX,
 };
 
-static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr, int msg/*, int nonblocking*/) {
+static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
     struct sk_buff *skb;
     void *msg_head;
     int ret = -1;
@@ -84,7 +86,7 @@ static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr,
     genlmsg_end(skb, msg_head);
 
     // send the message
-    ret = nlmsg_unicast(nl_sock, skb, port_id);
+    ret = nlmsg_unicast(init_net.genl_sock, skb, port_id);
     // ret here will contain the length of the sent message (> 0), or
     // an error (< 0)
     if (ret < 0) {
@@ -102,29 +104,34 @@ static int send_to_runtime(struct sock *nl_sock, u32 port_id, int cmd, int attr,
 
 /* STACK_REQ command: send a message requesting the current language
  * runtime's callstack from the given process, and return the callgraph
- * to the caller. */
+ * to the caller. 
+ * Expects the caller to hold the stack_request lock. */
 pyr_cg_node_t *pyr_stack_request(u32 pid)
 {
     int err;
     pyr_cg_node_t *cg = NULL;
 
-    printk(KERN_INFO "[%s] Requesting callstack from runtime at %d\n", __func__, pid);
+    if(pyr_callstack_request_alloc(&callstack_req))
+      goto out;
+
+    callstack_req->port_id = pid;
     
-    err = send_to_runtime(upcall_sock, pid, SI_COMM_C_STACK_REQ,
-                          SI_COMM_A_KERN_REQ, STACK_REQ_CMD/*, 0*/);
+    printk(KERN_INFO "[%s] Requesting callstack from runtime at %d\n", __func__, callstack_req->port_id);
+    
+    err = send_to_runtime(callstack_req->port_id, SI_COMM_C_STACK_REQ,
+                          SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
     if (err) {
         goto out;
     }
 
-    // TODO: synchronize here bc we might have more than one thread
-    runtime_responded = 0;
-    while(!runtime_responded){}
+    while(!callstack_req->runtime_responded){}
 
-    // TODO: parse the callgraph
+    // FIXME: de-serialize the callgraph
 
-    printk(KERN_INFO "[%s] Successfully received user response: %s\n", __func__, cg_buf);
-
+    printk(KERN_INFO "[%s] Successfully received user response: %s\n", __func__, callstack_req->cg_buf);
+    
  out:
+    pyr_callstack_request_free(&callstack_req);
     return cg;
 }
 
@@ -139,6 +146,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     char * mydata = NULL;
     int err = 0;
     u32 snd_port;
+    int valid_pid = 0;
     struct task_struct *tsk;
     struct pyr_profile *profile;
 
@@ -148,7 +156,6 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     /*for each attribute there is an index in info->attrs which points
      * to a nlattr structure in this structure the data is given */
     na = info->attrs[SI_COMM_A_USR_MSG];
-    // TODO: Need to check here that the command we received was a REG_PROC
     if (na) {
         mydata = (char *)nla_data(na);
         if (mydata == NULL)
@@ -162,37 +169,44 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     if (err)
       return -1;
 
-    /*    if (valid_pid) {
-        // TODO: Can the port ID ever be different that the PID?
-        tsk = pid_task(find_vpid(snd_port), PIDTYPE_PID);
-        if (!tsk) {
-            valid_pid = 0;
-            goto out;
-        }
-        profile = pyr_get_task_profile(tsk);
-        if (!profile) {
-            valid_pid = 0;
-            goto out;
-        }
-        profile->port_id = snd_port;
-        }*/
+    // TODO: Handle port IDs that are different from the PID
+    valid_pid = (snd_port == info->snd_portid) ? 1 : 0;
 
+    if (valid_pid) {
+      tsk = pid_task(find_vpid(snd_port), PIDTYPE_PID);
+      if (!tsk) {
+	valid_pid = 0;
+	goto out;
+      }
+      profile = pyr_get_task_profile(tsk);
+      if (!profile) {
+	valid_pid = 0;
+	goto out;
+      }
+      if (!profile->using_pyronia) {
+	profile->port_id = snd_port;
+	profile->using_pyronia = 1;
+      }
+    }
+    
     printk(KERN_INFO "[%s] userspace at port %d registered SI port ID: %d\n", __func__, info->snd_portid, snd_port);
     
  out:
     /* This serves as an ACK from the kernel */
-    err = send_to_runtime(genl_info_net(info)->genl_sock, info->snd_portid,
+    err = send_to_runtime(info->snd_portid,
                           SI_COMM_C_REGISTER_PROC, SI_COMM_A_USR_MSG,
-                          0/*, MSG_DONTWAIT*/);
+                          !valid_pid);
     if (err)
       printk(KERN_ERR "[%s] Error responding to runtime: %d\n", __func__, err);
-
-    // FIXME: remove after testing
-    //pyr_stack_request(snd_port);
-
+    
     return 0;
 }
 
+/* STACK_REQ command: receive a response containing the requested 
+ * runtime callstack. This handler sets the runtime_requested variable
+ * to true, so that the callstack request waiting for the response may
+ * complete.
+ */
 static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
   struct nlattr *na;
   char * mydata = NULL;
@@ -200,21 +214,25 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
   if (info == NULL)
     goto out;
   
-  /*for each attribute there is an index in info->attrs which points
-     * to a nlattr structure in this structure the data is given */
+  /* for each attribute there is an index in info->attrs which points
+   * to a nlattr structure in this structure the data is given */
   na = info->attrs[SI_COMM_A_USR_MSG];
-  // TODO: Need to check here that the command we received was a STACK_REQ
   if (na) {
     mydata = (char *)nla_data(na);
     if (mydata == NULL)
-      printk(KERN_ERR "[smv_netlink.c] error while receiving data\n");
+      printk(KERN_ERR "[%s] error while receiving data\n", __func__);
   }
   else
-    printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
+    printk(KERN_CRIT "[%s] no info->attrs %i\n", __func__, SI_COMM_A_USR_MSG);
 
-  memset(cg_buf, 0, MAX_RECV_LEN);
-  memcpy(cg_buf, mydata, MAX_RECV_LEN);
-  runtime_responded = 1;
+
+  if (info->snd_portid != callstack_req->port_id) {
+    // this is going to cause the callstack request to continue blocking
+    goto out;
+  }
+  
+  memcpy(callstack_req->cg_buf, mydata, MAX_RECV_LEN);
+  callstack_req->runtime_responded = 1;
 
  out:
   return 0;
@@ -257,23 +275,14 @@ static int __init kernel_comm_init(void)
 {
     int rc;
 
-    upcall_sock = init_net.genl_sock;
-    if (!upcall_sock) {
-        printk("upcall socket create\n");
-	struct netlink_kernel_cfg cfg = {
-	  .flags = NL_CFG_F_NONROOT_RECV,
-	};
-	upcall_sock = netlink_kernel_create(&init_net, NETLINK_GENERIC, &cfg);
-	if (!upcall_sock)
-	  goto fail;
-    }
-
     /*register new family*/
     rc = genl_register_family_with_ops(&si_comm_gnl_family, si_comm_gnl_ops);
     if (rc != 0){
         printk("register ops: %i\n",rc);
         goto fail;
     }
+
+    mutex_init(&pyr_si_mutex);
 
     printk(KERN_INFO "[pyronia] Initialized SI communication channel\n");
     return 0;
