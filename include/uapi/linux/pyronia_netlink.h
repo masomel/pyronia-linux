@@ -43,6 +43,4 @@ struct nla_policy si_comm_genl_policy[] = {
     [SI_COMM_A_KERN_REQ] = { .type = NLA_U8 },
 };
 
-pyr_cg_node_t *pyr_stack_request(u32);
-
 #endif /* __PYR_SI_COMM_H */

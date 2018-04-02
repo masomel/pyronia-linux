@@ -24,14 +24,6 @@
 #include "include/callgraph.h"
 #include "include/stack_inspector.h"
 
-#ifdef PYR_TESTING
-#if PYR_TESTING
-#include "include/kernel_test.h"
-#else
-#include "include/userland_test.h"
-#endif
-#endif
-
 #include "net_names.h"
 
 struct pyr_fs_entry pyr_fs_entry_network[] = {
@@ -230,6 +222,8 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
             error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
                                  sk->sk_protocol, sk);
 
+	    PYR_DEBUG("[%s] Profile %s using pyronia? %d\n", __func__, profile->base.name, profile->using_pyronia);
+	    
             // Pyronia hook: check the call stack to determine
             // if the requesting library has permissions to
             // complete this operation

@@ -12,6 +12,7 @@
 #include <linux/pid.h>
 #include <linux/string.h>
 #include <linux/sched.h>
+#include <linux/wait.h>
 #include <linux/delay.h>
 #include <linux/net.h>
 #include <uapi/linux/pyronia_netlink.h>
@@ -22,9 +23,9 @@
 #include "include/si_comm.h"
 #include "include/stack_inspector.h"
 
-static struct pyr_callstack_request *callstack_req;
+struct pyr_callstack_request *callstack_req;
 
-struct mutex pyr_si_mutex;
+static DECLARE_WAIT_QUEUE_HEAD(callstack_req_waitq);
 
 /* family definition */
 static struct genl_family si_comm_gnl_family = {
@@ -48,16 +49,8 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
                __func__, cmd, port_id);
         goto out;
     }
-
+       
     //Create the message headers
-    /* arguments of genlmsg_put:
-       struct sk_buff *,
-       int (sending) pid,
-       int sequence number,
-       struct genl_family *,
-       int flags,
-       u8 command index (why do we need this?)
-    */
     msg_head = genlmsg_put(skb, 0, 0, &si_comm_gnl_family,
                            0, cmd);
 
@@ -68,33 +61,35 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
     }
 
     if (cmd == SI_COMM_C_STACK_REQ && attr == SI_COMM_A_KERN_REQ) {
-        // create the message
-        ret = nla_put_u8(skb, attr, STACK_REQ_CMD);
-        if (ret != 0) {
-            printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, port_id);
-            goto out;
-        }
+      // create the message
+      ret = nla_put_u8(skb, attr, STACK_REQ_CMD);
+      if (ret != 0) {
+	printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, port_id);
+	goto out;
+      }
+      PYR_DEBUG("[%s] Creating stack request message to runtime %d\n", __func__, port_id);
     }
     else {
-        sprintf(buf, "%d", msg);
-        ret = nla_put_string(skb, SI_COMM_A_USR_MSG, buf);
-        if (ret != 0)
-            goto out;
+      sprintf(buf, "%d", msg);
+      ret = nla_put_string(skb, SI_COMM_A_USR_MSG, buf);
+      if (ret != 0)
+	goto out;
+      PYR_DEBUG("[%s] Creating other message to runtime %d: %s\n", __func__, port_id, buf);
     }
 
     // finalize the message
     genlmsg_end(skb, msg_head);
 
+    PYR_DEBUG("[%s] Unicasting the message to runtime %d\n", __func__, port_id); 
+    
     // send the message
     ret = nlmsg_unicast(init_net.genl_sock, skb, port_id);
-    // ret here will contain the length of the sent message (> 0), or
-    // an error (< 0)
     if (ret < 0) {
         printk("[%s] Error %d sending message to %d\n", __func__, ret, port_id);
         goto out;
     }
     ret = 0;
-
+    
  out:
     if (ret) {
         // TODO: release the kraken here
@@ -111,8 +106,10 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     int err;
     pyr_cg_node_t *cg = NULL;
 
-    if(pyr_callstack_request_alloc(&callstack_req))
-      goto out;
+    if (!pid) {
+      PYR_ERROR("[%s] Oops, cannot request callstack from pid = 0!!\n", __func__);
+      return NULL;
+    }
 
     callstack_req->port_id = pid;
     
@@ -120,19 +117,34 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     
     err = send_to_runtime(callstack_req->port_id, SI_COMM_C_STACK_REQ,
                           SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
+    
     if (err) {
-        goto out;
+      goto out;
     }
 
-    while(!callstack_req->runtime_responded){}
+    PYR_DEBUG("[%s] Waiting for runtime response now\n", __func__);
+    callstack_req->runtime_responded = 0;
 
+    wait_event_interruptible(callstack_req_waitq, callstack_req->runtime_responded == 1);
+    
+    if (!callstack_req->cg_buf) {
+      goto out;
+    }
+    
     // FIXME: de-serialize the callgraph
 
     printk(KERN_INFO "[%s] Successfully received user response: %s\n", __func__, callstack_req->cg_buf);
-    
+
  out:
-    pyr_callstack_request_free(&callstack_req);
+    callstack_req->runtime_responded = 0;
     return cg;
+}
+
+/* Return a pointer to the current callstack request.
+ * This can be then be used to acquire the lock to do a callstack
+ * request. */
+struct pyr_callstack_request *pyr_get_current_callstack_request(void) {
+  return callstack_req;
 }
 
 /* REGISTER_PROC command: receive a message with a process' PID. This
@@ -183,10 +195,12 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
 	valid_pid = 0;
 	goto out;
       }
-      if (!profile->using_pyronia) {
+      mutex_lock(&profile->ns->lock);
+      if (!profile->using_pyronia || !profile->port_id) {
 	profile->port_id = snd_port;
 	profile->using_pyronia = 1;
       }
+      mutex_unlock(&profile->ns->lock);
     }
     
     printk(KERN_INFO "[%s] userspace at port %d registered SI port ID: %d\n", __func__, info->snd_portid, snd_port);
@@ -233,6 +247,7 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
   
   memcpy(callstack_req->cg_buf, mydata, MAX_RECV_LEN);
   callstack_req->runtime_responded = 1;
+  wake_up_interruptible(&callstack_req_waitq);
 
  out:
   return 0;
@@ -271,44 +286,49 @@ static const struct genl_ops si_comm_gnl_ops[] = {
     },
 };
 
-static int __init kernel_comm_init(void)
+static int __init pyr_kernel_comm_init(void)
 {
     int rc;
 
     /*register new family*/
     rc = genl_register_family_with_ops(&si_comm_gnl_family, si_comm_gnl_ops);
     if (rc != 0){
-        printk("register ops: %i\n",rc);
-        goto fail;
+      printk(KERN_ERR "[%s] register ops: %i\n",__func__, rc);
+      goto fail;
     }
 
-    mutex_init(&pyr_si_mutex);
+    if(pyr_callstack_request_alloc(&callstack_req)) {
+      printk(KERN_ERR "[%s] Could not allocate new stack request object\n", __func__);
+      goto fail;
+    }
 
-    printk(KERN_INFO "[pyronia] Initialized SI communication channel\n");
+    PYR_DEBUG("[%s] Initialized SI communication channel\n", __func__);
     return 0;
 
 fail:
     genl_unregister_family(&si_comm_gnl_family);
-    printk(KERN_CRIT "[pyronia] Error occured while creating SI netlink channel\n");
+    printk(KERN_CRIT "[%s] Error occured while creating SI netlink channel\n", __func__);
     return -1;
 }
 
-static void __exit kernel_comm_exit(void)
+static void __exit pyr_kernel_comm_exit(void)
 {
     int ret;
 
     /*unregister the family*/
     ret = genl_unregister_family(&si_comm_gnl_family);
     if(ret !=0){
-        printk("unregister family %i\n",ret);
+      printk(KERN_ERR "[%s] unregister family %i\n", __func__, ret);
     }
 
-    printk(KERN_INFO "[pyronia] SI channel teardown complete\n");
+    pyr_callstack_request_free(&callstack_req);
+
+    PYR_DEBUG("[%s] SI channel teardown complete\n", __func__);
 }
 
 
-module_init(kernel_comm_init);
-module_exit(kernel_comm_exit);
+module_init(pyr_kernel_comm_init);
+module_exit(pyr_kernel_comm_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Marcela S. Melara");
 MODULE_DESCRIPTION("Main component for stack inspection-related LSM-to-userspace communication.");
