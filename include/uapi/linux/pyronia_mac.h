@@ -14,6 +14,8 @@
 #ifndef __PYR_MAC_H
 #define __PYR_MAC_H
 
+#define CALLSTACK_STR_DELIM ","
+
 /** pyr_data_types defines the possible expected sensitive
  * data types obtained from sensors or files
  */
@@ -30,7 +32,8 @@ enum pyr_data_types {
 // to complete a sensitive operation
 struct pyr_cg_node {
     const char *lib;
-    enum pyr_data_types data_type; // defined in lib_policy.h
+    // TODO: currently unused
+    enum pyr_data_types data_type;
     // only keep a downward link to the child since we compute the
     // effective permission by traversing from the main app to the function
     // triggering the security check

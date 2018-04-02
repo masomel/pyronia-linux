@@ -80,6 +80,7 @@ struct pyr_acl_entry {
         struct net_entry net_dest;
     } target;
 
+    // TODO: currently unused
     enum pyr_data_types data_type;
     struct pyr_acl_entry *next;
 };

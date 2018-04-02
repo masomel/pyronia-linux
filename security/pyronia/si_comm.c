@@ -130,10 +130,15 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     if (!callstack_req->cg_buf) {
       goto out;
     }
-    
-    // FIXME: de-serialize the callgraph
 
-    printk(KERN_INFO "[%s] Successfully received user response: %s\n", __func__, callstack_req->cg_buf);
+    PYR_DEBUG("[%s] Deserializing runtime response\n", __func__);
+    
+    // deserialize the callstack we've received from userland
+    if (pyr_deserialize_callstack(&cg, callstack_req->cg_buf)) {
+        goto out;
+    }
+
+    PYR_DEBUG("[%s] Successfully received user response: %s\n", __func__, callstack_req->cg_buf);
 
  out:
     callstack_req->runtime_responded = 0;
@@ -155,7 +160,7 @@ struct pyr_callstack_request *pyr_get_current_callstack_request(void) {
 static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
 {
     struct nlattr *na;
-    char * mydata = NULL;
+    char * msg = NULL;
     int err = 0;
     u32 snd_port;
     int valid_pid = 0;
@@ -169,15 +174,15 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
      * to a nlattr structure in this structure the data is given */
     na = info->attrs[SI_COMM_A_USR_MSG];
     if (na) {
-        mydata = (char *)nla_data(na);
-        if (mydata == NULL)
-            printk(KERN_ERR "[smv_netlink.c] error while receiving data\n");
+        msg = (char *)nla_data(na);
+        if (msg == NULL)
+            printk(KERN_ERR "[%s] error while receiving data\n", __func__);
     }
     else
         printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
 
     /* Parse the received message here */
-    err = kstrtou32(mydata, 10, &snd_port);
+    err = kstrtou32(msg, 10, &snd_port);
     if (err)
       return -1;
 

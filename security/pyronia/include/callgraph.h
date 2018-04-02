@@ -17,10 +17,11 @@
 #include <uapi/linux/pyronia_mac.h>
 #include "lib_policy.h"
 
-int pyr_new_cg_node(pyr_cg_node_t **, const char *, enum pyr_data_types,
+int pyr_new_cg_node(pyr_cg_node_t **, char *, enum pyr_data_types,
                     pyr_cg_node_t *);
 void pyr_free_callgraph(pyr_cg_node_t **);
 int pyr_compute_lib_perms(struct pyr_lib_policy_db *, pyr_cg_node_t *,
                      const char *, u32 *);
+int pyr_deserialize_callstack(pyr_cg_node_t **, char *);
 
 #endif /* __PYR_CALLGRAPH_H */
