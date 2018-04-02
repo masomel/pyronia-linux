@@ -18,7 +18,7 @@
 #include "include/pyronia.h"
 
 // Allocate a new callgraph node
-int pyr_new_cg_node(pyr_cg_node_t **cg_root, char* lib,
+int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
                         enum pyr_data_types data_type,
                         pyr_cg_node_t *child) {
 
@@ -145,7 +145,7 @@ void pyr_free_callgraph(pyr_cg_node_t **cg_root) {
 int pyr_deserialize_callstack(pyr_cg_node_t **root, char *cs_str) {
     pyr_cg_node_t *cur_node = NULL, *next_node = NULL;
     int err;
-    char *next_lib, num_str;
+    char *next_lib, *num_str;
     u32 num_nodes, count = 0;
 
     // first token in the string is the number of callstack
@@ -157,15 +157,25 @@ int pyr_deserialize_callstack(pyr_cg_node_t **root, char *cs_str) {
         goto fail;
 
     next_lib = strsep(&cs_str, CALLSTACK_STR_DELIM);
-    while(next_lib || count < num_nodes) {
-        err = pyr_new_cg_node(&next_node, next_lib, 0, cur_node);
+    while(next_lib && count < num_nodes) {
+        err = pyr_new_cg_node(&next_node, next_lib, 0, NULL);
         if (err) {
             goto fail;
         }
-        next_lib = strsep(&cs_str, CALLSTACK_STR_DELIM);
-        // re-assign next_node to cur_node for next iteration
-        cur_node = next_node;
+        // the string we receive is ordered from CG root to leaf
+	// so we need to re-assign the last node's child to the new node
+	// before the next iteration
+	if (cur_node == NULL) {
+	  cur_node = next_node;
+	  *root = cur_node;
+	}
+	else{
+	  cur_node->child = next_node;
+	  cur_node = cur_node->child;	
+	}
         next_node = NULL;
+	
+	next_lib = strsep(&cs_str, CALLSTACK_STR_DELIM);
         count++;
     }
 
@@ -174,13 +184,15 @@ int pyr_deserialize_callstack(pyr_cg_node_t **root, char *cs_str) {
     if (num_nodes > 0 && count < num_nodes)
         goto fail;
 
-    *root = cur_node;
     return 0;
  fail:
     if (next_node)
         pyr_free_callgraph(&next_node);
     if (cur_node)
         pyr_free_callgraph(&cur_node);
+    if (*root)
+        pyr_free_callgraph(root);
+    
     *root = NULL;
     return err;
 }

@@ -18,6 +18,7 @@
 #include <uapi/linux/pyronia_netlink.h>
 #include <uapi/linux/pyronia_mac.h>
 
+#include "include/callgraph.h"
 #include "include/context.h"
 #include "include/policy.h"
 #include "include/si_comm.h"
@@ -131,15 +132,13 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
       goto out;
     }
 
-    PYR_DEBUG("[%s] Deserializing runtime response\n", __func__);
-    
+    PYR_DEBUG("[%s] Successfully received user response: %s\n", __func__, callstack_req->cg_buf);
+
     // deserialize the callstack we've received from userland
     if (pyr_deserialize_callstack(&cg, callstack_req->cg_buf)) {
         goto out;
     }
-
-    PYR_DEBUG("[%s] Successfully received user response: %s\n", __func__, callstack_req->cg_buf);
-
+    
  out:
     callstack_req->runtime_responded = 0;
     return cg;

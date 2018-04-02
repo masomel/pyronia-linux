@@ -31,7 +31,7 @@ enum pyr_data_types {
 // by the Pyronia LSM to determine if a library has permission
 // to complete a sensitive operation
 struct pyr_cg_node {
-    const char *lib;
+    char *lib;
     // TODO: currently unused
     enum pyr_data_types data_type;
     // only keep a downward link to the child since we compute the
@@ -41,5 +41,9 @@ struct pyr_cg_node {
 };
 
 typedef struct pyr_cg_node pyr_cg_node_t;
+
+int pyr_new_cg_node(pyr_cg_node_t **, const char *, enum pyr_data_types,
+                    pyr_cg_node_t *);
+void pyr_free_callgraph(pyr_cg_node_t **);
 
 #endif

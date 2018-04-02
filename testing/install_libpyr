@@ -13,7 +13,7 @@ make
 echo "================= Copying pyronia header files to: $SYSINC ================="
 sudo cp pyronia_lib.h /usr/include
 
-echo "================= Copying smv library to system folder: $SYSLIB ================="
+echo "================= Copying pyronia library to system folder: $SYSLIB ================="
 sudo cp libpyronia.so /usr/lib
 sudo cp libpyronia.so /usr/lib/x86_64-linux-gnu/
 sudo cp libpyronia.so /lib/x86_64-linux-gnu/

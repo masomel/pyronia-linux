@@ -63,7 +63,7 @@ void pyr_callstack_request_free(struct pyr_callstack_request **crp) {
  * @lib_perms is set to 0 if computing the permissions fails
  */
 void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
-			   char *name, u32 *lib_perms) {
+			   const char *name, u32 *lib_perms) {
   
   pyr_cg_node_t *callgraph = NULL;
   u32 perms = 0;

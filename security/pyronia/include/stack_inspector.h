@@ -28,6 +28,6 @@ struct pyr_callstack_request {
 int pyr_callstack_request_alloc(struct pyr_callstack_request **req);
 void pyr_callstack_request_free(struct pyr_callstack_request **crp);
 void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
-			   char *name, u32 *lib_perms);
+			   const char *name, u32 *lib_perms);
 
 #endif /* __PYR_STACK_INSP_H */
