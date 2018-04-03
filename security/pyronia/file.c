@@ -21,11 +21,6 @@
 #include "include/callgraph.h"
 #include "include/stack_inspector.h"
 
-#define DNS_LIB "/lib/x86_64-linux-gnu/libnss_dns-2.23.so"
-#define MDNS4_LIB "/lib/x86_64-linux-gnu/libnss_mdns4_minimal.so.2"
-#define FILES_LIB "/lib/x86_64-linux-gnu/libnss_files-2.23.so"
-#define RESOLV_LIB "/lib/x86_64-linux-gnu/libresolv-2.23.so"
-
 struct file_perms pyr_nullperms;
 
 /**
@@ -288,48 +283,67 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 {
 	char *buffer = NULL;
 	struct file_perms perms = {};
-        u32 lib_perms;
-	const char *name, *info = NULL;
-	int error;
+        u32 allow_perms, lib_perms;
+        const char *name, *info = NULL;
+        int error;
+        bool is_default = 0;
 
-	flags |= profile->path_flags | (S_ISDIR(cond->mode) ? PATH_IS_DIR : 0);
-	error = pyr_path_name(path, flags, &buffer, &name, &info);
-	if (error) {
-		if (error == -ENOENT && is_deleted(path->dentry)) {
-			/* Access to open files that are deleted are
-			 * given a pass (implicit delegation)
-			 */
-			error = 0;
-			info = NULL;
-			perms.allow = request;
-		}
-	} else {
-		pyr_str_perms(profile->file.dfa, profile->file.start, name,
-                              cond, &perms);
-		if (request & ~perms.allow)
-			error = -EACCES;
-	}
-	
-	PYR_DEBUG("[%s] Profile %s using pyronia? %d\n", __func__, profile->base.name, profile->using_pyronia);
-	
+        flags |= profile->path_flags | (S_ISDIR(cond->mode) ? PATH_IS_DIR : 0);
+        error = pyr_path_name(path, flags, &buffer, &name, &info);
+        if (error) {
+            if (error == -ENOENT && is_deleted(path->dentry)) {
+                /* Access to open files that are deleted are
+                 * given a pass (implicit delegation)
+                 */
+                error = 0;
+                info = NULL;
+                perms.allow = request;
+            }
+        } else {
+            pyr_str_perms(profile->file.dfa, profile->file.start, name,
+                          cond, &perms);
+            
+            // let's check if the requested resource is a default resource
+            if (perms.allow & PYR_LIB_DEFAULT) {
+                is_default = 1;
+                allow_perms = perms.allow ^ PYR_LIB_DEFAULT;
+            }
+            else {
+                allow_perms = perms.allow;
+            }
+            
+            if (request & ~allow_perms)
+                error = -EACCES;
+        }
+        
         // Pyronia hook: check the call stack to determine
         // if the requesting library has permissions to
         // complete this operation
-	if (!error && profile->using_pyronia) {
-
-	  PYR_DEBUG("[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
-	  
-	  pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,
-				name, &lib_perms);
-	  
-	  // this checks if the requested permissions are an exact match
-	  // to the effective library permissions
-	  if (request & ~lib_perms) {
-	    PYR_ERROR("File - Expected %d, got %d; file: %s\n", lib_perms, request, name);
-	    error = -EACCES;
-	  }
-	  else
-	    PYR_ERROR("File - Operation allowed for %s\n", name);
+        if (!error && profile->using_pyronia) {
+            
+            PYR_DEBUG("[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
+            
+            if (is_default) {
+                // the requested resource is a default resource, so our library
+                // perms are simply the default perms we gathered from the loaded profile
+                lib_perms = allow_perms;
+                PYR_DEBUG("[%s] %s is default in profile %s\n", __func__, name, profile->base.name);
+            }
+            else {
+                // the requested resource is not in our defaults list, so ask for
+                // the callstack
+                pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,
+                                      name, &lib_perms);
+            }
+            
+            // this checks if the requested permissions are an exact match
+            // to the effective library permissions
+            if (request & ~lib_perms) {
+                PYR_ERROR("File - Expected %d, got %d; file: %s\n", lib_perms, request, name);
+                error = -EACCES;
+            }
+            else
+                PYR_ERROR("File - Operation allowed for %s\n", name);
 	}
 	
 	error = pyr_audit_file(profile, &perms, GFP_KERNEL, op, request,
