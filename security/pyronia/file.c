@@ -224,6 +224,8 @@ static struct file_perms compute_perms(struct pyr_dfa *dfa, unsigned int state,
 		perms.allow |= PYR_MAY_CHANGE_PROFILE;
 	if (ACCEPT_TABLE(dfa)[state] & 0x40000000)
 		perms.allow |= PYR_MAY_ONEXEC;
+	if (ACCEPT_TABLE(dfa)[state] & PYR_LIB_DEFAULT)
+	  perms.allow |= PYR_LIB_DEFAULT;
 
 	return perms;
 }
@@ -302,7 +304,9 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
         } else {
             pyr_str_perms(profile->file.dfa, profile->file.start, name,
                           cond, &perms);
-            
+
+	    PYR_DEBUG("[%s] Allow perms for %s: 0x%16x\n", __func__, name, perms.allow);
+	    
             // let's check if the requested resource is a default resource
             if (perms.allow & PYR_LIB_DEFAULT) {
                 is_default = 1;
@@ -320,9 +324,7 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
         // if the requesting library has permissions to
         // complete this operation
         if (!error && profile->using_pyronia) {
-            
-            PYR_DEBUG("[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
-            
+                        
             if (is_default) {
                 // the requested resource is a default resource, so our library
                 // perms are simply the default perms we gathered from the loaded profile
@@ -330,6 +332,8 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
                 PYR_DEBUG("[%s] %s is default in profile %s\n", __func__, name, profile->base.name);
             }
             else {
+	        PYR_DEBUG("[%s] Requesting callstack for resource %s from runtime %d\n", __func__, name, profile->port_id);
+
                 // the requested resource is not in our defaults list, so ask for
                 // the callstack
                 pyr_inspect_callstack(profile->port_id, profile->lib_perm_db,

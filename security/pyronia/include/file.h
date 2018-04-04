@@ -36,7 +36,7 @@ struct path;
 #define PYR_EXEC_MMAP                   0x0800
 
 #define PYR_MAY_LINK			0x1000
-#define PYR_LIB_DEFAULT                 0x4000
+#define PYR_LIB_DEFAULT                 0x2000
 #define PYR_LINK_SUBSET			PYR_MAY_LOCK	/* overlaid */
 #define PYR_MAY_ONEXEC			0x40000000	/* exec allows onexec */
 #define PYR_MAY_CHANGE_PROFILE		0x80000000
@@ -46,7 +46,7 @@ struct path;
 				 PYR_MAY_CREATE | PYR_MAY_DELETE |	\
 				 PYR_MAY_META_READ | PYR_MAY_META_WRITE | \
 				 PYR_MAY_CHMOD | PYR_MAY_CHOWN | PYR_MAY_LOCK | \
-				 PYR_EXEC_MMAP | PYR_MAY_LINK)
+				 PYR_EXEC_MMAP | PYR_MAY_LINK | PYR_LIB_DEFAULT)
 
 /*
  * The xindex is broken into 3 parts
