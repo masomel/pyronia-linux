@@ -36,7 +36,6 @@ struct path;
 #define PYR_EXEC_MMAP                   0x0800
 
 #define PYR_MAY_LINK			0x1000
-#define PYR_LIB_DEFAULT                 0x2000
 #define PYR_LINK_SUBSET			PYR_MAY_LOCK	/* overlaid */
 #define PYR_MAY_ONEXEC			0x40000000	/* exec allows onexec */
 #define PYR_MAY_CHANGE_PROFILE		0x80000000

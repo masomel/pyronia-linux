@@ -50,7 +50,7 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
                __func__, cmd, port_id);
         goto out;
     }
-       
+
     //Create the message headers
     msg_head = genlmsg_put(skb, 0, 0, &si_comm_gnl_family,
                            0, cmd);
@@ -65,8 +65,8 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
       // create the message
       ret = nla_put_u8(skb, attr, STACK_REQ_CMD);
       if (ret != 0) {
-	printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, port_id);
-	goto out;
+        printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, port_id);
+        goto out;
       }
       PYR_DEBUG("[%s] Creating stack request message to runtime %d\n", __func__, port_id);
     }
@@ -74,15 +74,15 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
       sprintf(buf, "%d", msg);
       ret = nla_put_string(skb, SI_COMM_A_USR_MSG, buf);
       if (ret != 0)
-	goto out;
+        goto out;
       PYR_DEBUG("[%s] Creating other message to runtime %d: %s\n", __func__, port_id, buf);
     }
 
     // finalize the message
     genlmsg_end(skb, msg_head);
 
-    PYR_DEBUG("[%s] Unicasting the message to runtime %d\n", __func__, port_id); 
-    
+    PYR_DEBUG("[%s] Unicasting the message to runtime %d\n", __func__, port_id);
+
     // send the message
     ret = nlmsg_unicast(init_net.genl_sock, skb, port_id);
     if (ret < 0) {
@@ -90,7 +90,7 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
         goto out;
     }
     ret = 0;
-    
+
  out:
     if (ret) {
         // TODO: release the kraken here
@@ -100,7 +100,7 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
 
 /* STACK_REQ command: send a message requesting the current language
  * runtime's callstack from the given process, and return the callgraph
- * to the caller. 
+ * to the caller.
  * Expects the caller to hold the stack_request lock. */
 pyr_cg_node_t *pyr_stack_request(u32 pid)
 {
@@ -113,12 +113,12 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     }
 
     callstack_req->port_id = pid;
-    
+
     printk(KERN_INFO "[%s] Requesting callstack from runtime at %d\n", __func__, callstack_req->port_id);
-    
+
     err = send_to_runtime(callstack_req->port_id, SI_COMM_C_STACK_REQ,
                           SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
-    
+
     if (err) {
       goto out;
     }
@@ -127,7 +127,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     callstack_req->runtime_responded = 0;
 
     wait_event_interruptible(callstack_req_waitq, callstack_req->runtime_responded == 1);
-    
+
     if (!callstack_req->cg_buf) {
       goto out;
     }
@@ -138,7 +138,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     if (pyr_deserialize_callstack(&cg, callstack_req->cg_buf)) {
         goto out;
     }
-    
+
  out:
     callstack_req->runtime_responded = 0;
     return cg;
@@ -151,8 +151,9 @@ struct pyr_callstack_request *pyr_get_current_callstack_request(void) {
   return callstack_req;
 }
 
-/* REGISTER_PROC command: receive a message with a process' PID. This
- * handler then stores this PID as part of the process' ACL to enable
+/* REGISTER_PROC command: receive a message with a process' PID and
+ * library-level policy. This handler then stores this PID and policy
+ * as part of the process' profile to enable
  * the kernel to request callstack information from the process
  * upon sensitive system calls.
  */
@@ -199,18 +200,19 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     if (valid_pid) {
       tsk = pid_task(find_vpid(snd_port), PIDTYPE_PID);
       if (!tsk) {
-	valid_pid = 0;
-	goto out;
+        valid_pid = 0;
+        goto out;
       }
       profile = pyr_get_task_profile(tsk);
       if (!profile) {
-	valid_pid = 0;
-	goto out;
+        valid_pid = 0;
+        goto out;
       }
       mutex_lock(&profile->ns->lock);
       if (!profile->using_pyronia || !profile->port_id) {
-	profile->port_id = snd_port;
-	profile->using_pyronia = 1;
+        profile->port_id = snd_port;
+        profile->using_pyronia = 1;
+        // load the library policy with the remaining message
         err = pyr_deserialize_lib_policy(profile, msg);
         if (err) {
             mutex_unlock(&profile->ns_lock);
@@ -220,9 +222,9 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
       }
       mutex_unlock(&profile->ns->lock);
     }
-    
+
     printk(KERN_INFO "[%s] userspace at port %d registered SI port ID: %d\n", __func__, info->snd_portid, snd_port);
-    
+
  out:
     /* This serves as an ACK from the kernel */
     err = send_to_runtime(info->snd_portid,
@@ -230,11 +232,11 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
                           !valid_pid);
     if (err)
       printk(KERN_ERR "[%s] Error responding to runtime: %d\n", __func__, err);
-    
+
     return 0;
 }
 
-/* STACK_REQ command: receive a response containing the requested 
+/* STACK_REQ command: receive a response containing the requested
  * runtime callstack. This handler sets the runtime_requested variable
  * to true, so that the callstack request waiting for the response may
  * complete.
@@ -245,7 +247,7 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
 
   if (info == NULL)
     goto out;
-  
+
   /* for each attribute there is an index in info->attrs which points
    * to a nlattr structure in this structure the data is given */
   na = info->attrs[SI_COMM_A_USR_MSG];
@@ -262,7 +264,7 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
     // this is going to cause the callstack request to continue blocking
     goto out;
   }
-  
+
   memcpy(callstack_req->cg_buf, mydata, MAX_RECV_LEN);
   callstack_req->runtime_responded = 1;
   wake_up_interruptible(&callstack_req_waitq);
