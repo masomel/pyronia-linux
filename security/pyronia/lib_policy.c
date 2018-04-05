@@ -390,6 +390,7 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
 
     next_rule = strsep(&lp_str, LIB_RULE_STR_DELIM);
     while(next_rule && count < num_rules) {
+      PYR_DEBUG("[%s] Next rule to parse: %s\n", __func__, next_rule);
         next_lib = strsep(&next_rule, RESOURCE_STR_DELIM);
         if (!next_lib) {
             PYR_ERROR("[%s] Malformed lib in policy rule %s\n", __func__,
@@ -406,7 +407,6 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
         }
         else {
             next_type = resource_entry;
-            next_name = strsep(&next_rule, LIB_RULE_STR_DELIM);
         }
 
         next_name = strsep(&next_rule, LIB_RULE_STR_DELIM);
