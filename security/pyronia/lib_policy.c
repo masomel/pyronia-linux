@@ -255,7 +255,6 @@ int pyr_add_default(struct pyr_lib_policy_db *policy_db,
                     enum acl_entry_type entry_type, const char *name,
                     u32 perms) {
     struct pyr_acl_entry *acl;
-    int err;
 
     acl = pyr_find_acl_entry(policy_db->defaults, name);
     if (!acl) {
@@ -401,7 +400,7 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
         // let's check if this is a resource entry or network entry:
         // network entries are going to have an extra "resource" section
         if(!strncmp(next_rule, "network ", 8)) {
-            next_type = network_entry;\
+            next_type = net_entry;
             next_rule = next_rule+8;
             next_perms = OP_CONNECT;
         }

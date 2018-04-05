@@ -215,7 +215,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
         // load the library policy with the remaining message
         err = pyr_deserialize_lib_policy(profile, msg);
         if (err) {
-            mutex_unlock(&profile->ns_lock);
+            mutex_unlock(&profile->ns->lock);
             valid_pid = 0;
             goto out;
         }

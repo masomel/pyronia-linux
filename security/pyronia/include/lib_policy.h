@@ -21,7 +21,7 @@
  * that a library's permissions should be transitively
  * passed on to the next library in a callstack.
  */
-#define TRANSITIVE_LIB_POLICY 0xffffffff;
+#define TRANSITIVE_LIB_POLICY 0xffffffff
 
 #define SI_PORT_STR_DELIM ":"
 #define LIB_RULE_STR_DELIM ","
@@ -113,9 +113,9 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *, const char *,
                        enum acl_entry_type, const char *, u32);
 int pyr_add_default(struct pyr_lib_policy_db *, enum acl_entry_type,
                     const char *, u32);
-u32 pyr_get_lib_perms(struct pyr_lib_policy_db *, const char *);
-u32 pyr_get_default_perms(struct pyr_lib_policy_db *, const char *,
-                      const char *);
+u32 pyr_get_lib_perms(struct pyr_lib_policy_db *, const char *,
+		      const char *);
+u32 pyr_get_default_perms(struct pyr_lib_policy_db *, const char *);
 int pyr_is_default_lib_policy(struct pyr_lib_policy_db *,
                               const char *);
 int pyr_new_lib_policy_db(struct pyr_lib_policy_db **);

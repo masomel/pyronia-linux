@@ -376,32 +376,6 @@ fail:
 }
 
 /**
- * unpack_lib_defaults - go through all allowed file rules
- * in a profile, and save all the lib default files in the lib_policy_db
- * defaults list. Also remove the default bit from the file modes.
- * @profile: profile for which to unpack the library defaults (NOT NULL)
- *
- * Returns: 1 if defaults are successfully unpacked
- */
-static bool *unpack_lib_defaults(struct pyr_profile *profile) {
-    int i;
-    struct pyr_dfa *dfa = profile->file.dfa;
-    
-    /* loop through accept permissions */
-    for (i = 0; i < dfa->tables[YYTD_ID_ACCEPT]->td_lolen; i++) {
-        int mode = ACCEPT_TABLE(dfa)[i];
-
-        if (mode & PYR_LIB_DEFAULT) {
-            ACCEPT_TABLE(dfa)[i] = mode ^ PYR_LIB_DEFAULT;
-            if (pyr_add_default(&profile->lib_perm_db))
-        }
-        
-        
-    }
-    
-}
-
-/**
  * unpack_trans_table - unpack a profile transition table
  * @e: serialized data extent information  (NOT NULL)
  * @profile: profile to add the accept table to (NOT NULL)
