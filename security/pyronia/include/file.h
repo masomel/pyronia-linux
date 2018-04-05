@@ -45,7 +45,7 @@ struct path;
 				 PYR_MAY_CREATE | PYR_MAY_DELETE |	\
 				 PYR_MAY_META_READ | PYR_MAY_META_WRITE | \
 				 PYR_MAY_CHMOD | PYR_MAY_CHOWN | PYR_MAY_LOCK | \
-				 PYR_EXEC_MMAP | PYR_MAY_LINK | PYR_LIB_DEFAULT)
+				 PYR_EXEC_MMAP | PYR_MAY_LINK)
 
 /*
  * The xindex is broken into 3 parts
