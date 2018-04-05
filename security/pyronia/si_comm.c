@@ -159,7 +159,7 @@ struct pyr_callstack_request *pyr_get_current_callstack_request(void) {
 static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
 {
     struct nlattr *na;
-    char * msg = NULL;
+    char *msg = NULL, *port_str = NULL;
     int err = 0;
     u32 snd_port;
     int valid_pid = 0;
@@ -181,7 +181,15 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
         printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
 
     /* Parse the received message here */
-    err = kstrtou32(msg, 10, &snd_port);
+    // the first token in our message should contain the
+    // SI port for the sender application
+    port_str = strsep(&msg, SI_PORT_STR_DELIM);
+    if (!port_str) {
+        PYR_ERROR("[%s] Malformed registration message: %s\n", __func__, msg);
+        err = -1;
+        goto out;
+    }
+    err = kstrtou32(port_str, 10, &snd_port);
     if (err)
       return -1;
 
@@ -203,6 +211,12 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
       if (!profile->using_pyronia || !profile->port_id) {
 	profile->port_id = snd_port;
 	profile->using_pyronia = 1;
+        err = pyr_deserialize_lib_policy(profile, msg);
+        if (err) {
+            mutex_unlock(&profile->ns_lock);
+            valid_pid = 0;
+            goto out;
+        }
       }
       mutex_unlock(&profile->ns->lock);
     }

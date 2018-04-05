@@ -230,6 +230,17 @@ static struct file_perms compute_perms(struct pyr_dfa *dfa, unsigned int state,
 	return perms;
 }
 
+u32 pyr_get_allow_file_perms(struct pyr_profile *profile,
+                             const char* name) {
+    unsigned int state;
+    u32 perms;
+    
+    state = pyr_dfa_match(profile->file.dfa, profile->file.start, name);
+    perms = map_old_perms(dfa_user_allow(profile->file.dfa, state));
+    perms |= PYR_MAY_META_READ;
+    return perms;
+}
+
 /**
  * pyr_str_perms - find permission that match @name
  * @dfa: to match against  (MAYBE NULL)
