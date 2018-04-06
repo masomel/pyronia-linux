@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LIBDIR=/home/pyronia/libpyronia
+LIBDIR=/home/pyronia/libpyronia/libapparmor
 
 cd $LIBDIR/libraries/libapparmor
 sudo make clean
