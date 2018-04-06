@@ -47,11 +47,17 @@ struct pyr_task_cxt *pyr_alloc_task_context(gfp_t flags)
 void pyr_free_task_context(struct pyr_task_cxt *cxt)
 {
 	if (cxt) {
-		pyr_put_profile(cxt->profile);
-		pyr_put_profile(cxt->previous);
-		pyr_put_profile(cxt->onexec);
-
-		kzfree(cxt);
+	  if (cxt->profile)
+	    cxt->profile->using_pyronia = 0;
+	  if (cxt->previous)
+	    cxt->previous->using_pyronia = 0;
+	  if (cxt->onexec)
+	    cxt->onexec->using_pyronia = 0;
+	  pyr_put_profile(cxt->profile);
+	  pyr_put_profile(cxt->previous);
+	  pyr_put_profile(cxt->onexec);
+	  
+	  kzfree(cxt);
 	}
 }
 
@@ -96,7 +102,7 @@ int pyr_replace_current_profile(struct pyr_profile *profile)
 	struct pyr_task_cxt *cxt = current_cxt();
 	struct cred *new;
 	BUG_ON(!profile);
-
+	
 	if (cxt->profile == profile)
 		return 0;
 
@@ -135,7 +141,7 @@ int pyr_set_current_onexec(struct pyr_profile *profile)
 	struct cred *new = prepare_creds();
 	if (!new)
 		return -ENOMEM;
-
+	
 	cxt = cred_cxt(new);
 	pyr_get_profile(profile);
 	pyr_put_profile(cxt->onexec);
@@ -163,6 +169,8 @@ int pyr_set_current_hat(struct pyr_profile *profile, u64 token)
 		return -ENOMEM;
 	BUG_ON(!profile);
 
+	PYR_DEBUG("[%s] got here: lib perm defaults: %p\n", __func__, profile->lib_perm_db->defaults);
+	
 	cxt = cred_cxt(new);
 	if (!cxt->previous) {
 		/* transfer refcount */
@@ -199,7 +207,7 @@ int pyr_restore_previous_profile(u64 token)
 	struct cred *new = prepare_creds();
 	if (!new)
 		return -ENOMEM;
-
+	
 	cxt = cred_cxt(new);
 	if (cxt->token != token) {
 		abort_creds(new);
@@ -210,6 +218,7 @@ int pyr_restore_previous_profile(u64 token)
 		abort_creds(new);
 		return 0;
 	}
+	PYR_DEBUG("[%s] got here: lib perm defaults: %p\n", __func__, cxt->profile->lib_perm_db->defaults);
 
 	pyr_put_profile(cxt->profile);
 	cxt->profile = pyr_get_newest_profile(cxt->previous);

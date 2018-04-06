@@ -28,10 +28,10 @@ static void free_acl_entry(struct pyr_acl_entry **entry) {
     if (e->next == NULL) {
         switch (e->entry_type) {
         case(resource_entry):
-            e->target.fs_resource.name = NULL;
+	  kvfree(e->target.fs_resource.name);
             break;
         case(net_entry):
-            e->target.net_dest.name = NULL;
+	    kvfree(e->target.net_dest.name);
             break;
         default:
             // FIXME: set errno here or something
@@ -54,7 +54,7 @@ static void free_lib_policy(struct pyr_lib_policy **policy) {
     }
 
     if (p->next == NULL) {
-        p->lib = NULL;
+        kvfree(p->lib);
         free_acl_entry(&(p->acl));
         kvfree(p);
     }
@@ -72,11 +72,17 @@ static int set_acl_entry(struct pyr_acl_entry *entry,
     entry->entry_type = entry_type;
     switch(entry->entry_type) {
         case(resource_entry):
-            entry->target.fs_resource.name = name;
+	    if (!entry->target.fs_resource.name) {
+	        entry->target.fs_resource.name = kvzalloc(strlen(name)+1);
+	        memcpy(entry->target.fs_resource.name, name, strlen(name));
+	    }
             entry->target.fs_resource.perms = perms;
             break;
         case(net_entry):
-            entry->target.net_dest.name = name;
+	    if (!entry->target.net_dest.name) {
+	        entry->target.net_dest.name = kvzalloc(strlen(name)+1);
+	        memcpy(entry->target.net_dest.name, name, strlen(name));
+	    }
             entry->target.net_dest.op = perms;
             break;
         default:
@@ -112,12 +118,10 @@ static int pyr_add_acl_entry(struct pyr_acl_entry **acl,
     new_entry->next = *acl;
     *acl = new_entry;
 
-    PYR_DEBUG("[%s] Added new ACL entry for name %s\n", __func__, name);
-
     return 0;
  fail:
     if (new_entry)
-        kvfree(new_entry);
+        free_acl_entry(&new_entry);
     return -1;
 }
 
@@ -209,13 +213,12 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *policy_db,
             PYR_ERROR("[%s] no mem for %s policy\n", __func__, lib);
             goto fail;
         }
-        policy->lib = lib;
+        policy->lib = kvzalloc(strlen(lib)+1);
+	memcpy(policy->lib, lib, strlen(lib));
     }
 
     acl = pyr_find_acl_entry(policy->acl, name);
     if (!acl) {
-        PYR_DEBUG("[%s] Adding entry for %s\n", __func__, name);
-
         if (pyr_add_acl_entry(&policy->acl, entry_type, name, perms)) {
             goto fail;
         }
@@ -241,7 +244,6 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *policy_db,
  fail:
     free_lib_policy(&policy);
     return -1;
-
 }
 
 // Allocates a new default policy entry and adds it to the policy DB
@@ -258,8 +260,6 @@ int pyr_add_default(struct pyr_lib_policy_db *policy_db,
 
     acl = pyr_find_acl_entry(policy_db->defaults, name);
     if (!acl) {
-        PYR_DEBUG("[%s] Adding entry for %s\n", __func__, name);
-
         if (pyr_add_acl_entry(&policy_db->defaults, entry_type, name, perms)) {
             goto fail;
         }
@@ -280,7 +280,6 @@ int pyr_add_default(struct pyr_lib_policy_db *policy_db,
     return 0;
  fail:
     return -1;
-
 }
 
 // Gets the permissions for the given resource from the library's policy
@@ -379,7 +378,7 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
     char *next_rule, *num_str, *next_lib, *next_name;
     u32 num_rules, next_perms, count = 0;
     enum acl_entry_type next_type;
-
+    
     // first token in the string is the number of lib policy
     // rules to expect
     num_str = strsep(&lp_str, LIB_RULE_STR_DELIM);
@@ -390,7 +389,7 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
 
     next_rule = strsep(&lp_str, LIB_RULE_STR_DELIM);
     while(next_rule && count < num_rules) {
-      PYR_DEBUG("[%s] Next rule to parse: %s\n", __func__, next_rule);
+      //PYR_DEBUG("[%s] Next rule to parse: %s\n", __func__, next_rule);
         next_lib = strsep(&next_rule, RESOURCE_STR_DELIM);
         if (!next_lib) {
             PYR_ERROR("[%s] Malformed lib in policy rule %s\n", __func__,
@@ -430,8 +429,7 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
         }
         else {
             err = pyr_add_lib_policy(profile->lib_perm_db, next_lib,
-                                     next_type,
-                                 next_name, next_perms);
+                                     next_type, next_name, next_perms);
         }
         if (err) {
             goto fail;

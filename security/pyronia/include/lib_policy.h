@@ -58,14 +58,14 @@ enum acl_entry_type {
 // for a file system resource-based
 // permissions
 struct resource_entry {
-    const char *name;
+    char *name;
     // this is the OR of various file access permissions
     // need to match with requested & ~perms to allow
     u32 perms;
 };
 
 struct net_entry {
-    const char *name;
+    char *name;
     // this is the OR of various permitted network operations
     // need to match with requested_op & ~op to allow
     u32 op;
@@ -93,7 +93,7 @@ struct pyr_acl_entry {
  * next: the next entry in the library policy database
  */
 struct pyr_lib_policy {
-    const char* lib;
+    char* lib;
     struct pyr_acl_entry *acl;
     struct pyr_lib_policy *next;
 };

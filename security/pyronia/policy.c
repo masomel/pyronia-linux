@@ -593,6 +593,8 @@ void pyr_free_profile(struct pyr_profile *profile)
 	if (!profile)
 		return;
 
+	pyr_free_lib_policy_db(&profile->lib_perm_db);
+	
 	/* free children profiles */
 	policy_destroy(&profile->base);
 	pyr_put_profile(rcu_access_pointer(profile->parent));
@@ -609,7 +611,7 @@ void pyr_free_profile(struct pyr_profile *profile)
 	pyr_put_dfa(profile->xmatch);
 	pyr_put_dfa(profile->policy.dfa);
 	pyr_put_replacedby(profile->replacedby);
-
+	
 	kzfree(profile->hash);
 	kzfree(profile);
 }
@@ -660,6 +662,9 @@ struct pyr_profile *pyr_alloc_profile(const char *hname)
 	if (!policy_init(&profile->base, NULL, hname))
 		goto fail;
 
+	profile->port_id = 0;
+	profile->using_pyronia = 0;
+	
 	if (pyr_new_lib_policy_db(&profile->lib_perm_db))
 	  goto fail;
 

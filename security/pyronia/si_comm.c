@@ -68,20 +68,16 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
         printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, port_id);
         goto out;
       }
-      PYR_DEBUG("[%s] Creating stack request message to runtime %d\n", __func__, port_id);
     }
     else {
       sprintf(buf, "%d", msg);
       ret = nla_put_string(skb, SI_COMM_A_USR_MSG, buf);
       if (ret != 0)
         goto out;
-      PYR_DEBUG("[%s] Creating other message to runtime %d: %s\n", __func__, port_id, buf);
     }
 
     // finalize the message
     genlmsg_end(skb, msg_head);
-
-    PYR_DEBUG("[%s] Unicasting the message to runtime %d\n", __func__, port_id);
 
     // send the message
     ret = nlmsg_unicast(init_net.genl_sock, skb, port_id);
@@ -114,7 +110,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
 
     callstack_req->port_id = pid;
 
-    printk(KERN_INFO "[%s] Requesting callstack from runtime at %d\n", __func__, callstack_req->port_id);
+    PYR_DEBUG("[%s] Requesting callstack from runtime at %d\n", __func__, callstack_req->port_id);
 
     err = send_to_runtime(callstack_req->port_id, SI_COMM_C_STACK_REQ,
                           SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
@@ -123,7 +119,6 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
       goto out;
     }
 
-    PYR_DEBUG("[%s] Waiting for runtime response now\n", __func__);
     callstack_req->runtime_responded = 0;
 
     wait_event_interruptible(callstack_req_waitq, callstack_req->runtime_responded == 1);
@@ -131,8 +126,6 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     if (!callstack_req->cg_buf) {
       goto out;
     }
-
-    PYR_DEBUG("[%s] Successfully received user response: %s\n", __func__, callstack_req->cg_buf);
 
     // deserialize the callstack we've received from userland
     if (pyr_deserialize_callstack(&cg, callstack_req->cg_buf)) {
@@ -182,6 +175,8 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
         printk(KERN_CRIT "no info->attrs %i\n", SI_COMM_A_USR_MSG);
 
     /* Parse the received message here */
+    PYR_DEBUG("[%s] Received registration message: %s\n", __func__, msg);
+    
     // the first token in our message should contain the
     // SI port for the sender application
     port_str = strsep(&msg, SI_PORT_STR_DELIM);
@@ -192,7 +187,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
     }
     err = kstrtou32(port_str, 10, &snd_port);
     if (err)
-      return -1;
+      goto out;
 
     // TODO: Handle port IDs that are different from the PID
     valid_pid = (snd_port == info->snd_portid) ? 1 : 0;
@@ -201,24 +196,28 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
       tsk = pid_task(find_vpid(snd_port), PIDTYPE_PID);
       if (!tsk) {
         valid_pid = 0;
+	PYR_DEBUG("couldn't find task with sender PID\n");
         goto out;
       }
       profile = pyr_get_task_profile(tsk);
       if (!profile) {
         valid_pid = 0;
+	PYR_DEBUG("couldn't find profile for the task\n");
         goto out;
       }
       mutex_lock(&profile->ns->lock);
-      if (!profile->using_pyronia || !profile->port_id) {
+      if (!profile->using_pyronia) {
         profile->port_id = snd_port;
         profile->using_pyronia = 1;
         // load the library policy with the remaining message
         err = pyr_deserialize_lib_policy(profile, msg);
         if (err) {
             mutex_unlock(&profile->ns->lock);
+	    PYR_DEBUG("couldn't deserialize lib policy\n");
             valid_pid = 0;
             goto out;
         }
+	pyr_get_profile(profile);
       }
       mutex_unlock(&profile->ns->lock);
     }
@@ -262,6 +261,7 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
 
   if (info->snd_portid != callstack_req->port_id) {
     // this is going to cause the callstack request to continue blocking
+    PYR_DEBUG("[%s] Inconsistent runtime IDs. Got %d, expected %d\n", __func__, );
     goto out;
   }
 
