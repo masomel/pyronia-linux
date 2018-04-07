@@ -47,12 +47,7 @@ struct pyr_task_cxt *pyr_alloc_task_context(gfp_t flags)
 void pyr_free_task_context(struct pyr_task_cxt *cxt)
 {
 	if (cxt) {
-	  if (cxt->profile)
-	    cxt->profile->using_pyronia = 0;
-	  if (cxt->previous)
-	    cxt->previous->using_pyronia = 0;
-	  if (cxt->onexec)
-	    cxt->onexec->using_pyronia = 0;
+	  pyr_free_profile_lib_policy(cxt->profile);
 	  pyr_put_profile(cxt->profile);
 	  pyr_put_profile(cxt->previous);
 	  pyr_put_profile(cxt->onexec);

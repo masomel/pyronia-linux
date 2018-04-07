@@ -384,8 +384,11 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
     num_str = strsep(&lp_str, LIB_RULE_STR_DELIM);
 
     err = kstrtou32(num_str, 10, &num_rules);
-    if (err)
+    if (err) {
+        PYR_ERROR("[%s] Malformed num rules %s\n", __func__,
+		  num_str);
         goto fail;
+    }
 
     next_rule = strsep(&lp_str, LIB_RULE_STR_DELIM);
     while(next_rule && count < num_rules) {
@@ -432,11 +435,13 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
                                      next_type, next_name, next_perms);
         }
         if (err) {
+	  PYR_ERROR("[%s] Could not add new ACL entry\n", __func__);
             goto fail;
         }
 
-        next_rule = strsep(&lp_str, LIB_RULE_STR_DELIM);
-        count++;
+	count++;
+	if (lp_str)
+	  next_rule = strsep(&lp_str, LIB_RULE_STR_DELIM);
     }
 
     // the string was somehow corrupted b/c we got fewer valid rules than

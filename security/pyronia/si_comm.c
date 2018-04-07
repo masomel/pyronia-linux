@@ -205,21 +205,22 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
 	PYR_DEBUG("couldn't find profile for the task\n");
         goto out;
       }
-      mutex_lock(&profile->ns->lock);
-      if (!profile->using_pyronia) {
-        profile->port_id = snd_port;
-        profile->using_pyronia = 1;
-        // load the library policy with the remaining message
-        err = pyr_deserialize_lib_policy(profile, msg);
-        if (err) {
-            mutex_unlock(&profile->ns->lock);
-	    PYR_DEBUG("couldn't deserialize lib policy\n");
-            valid_pid = 0;
-            goto out;
-        }
-	pyr_get_profile(profile);
+      err = pyr_init_profile_lib_policy(profile, snd_port);
+      if (err) {
+	valid_pid = 0;
+	PYR_DEBUG("couldn't init lib policy db for the task\n");
+	goto out;
       }
+      // load the library policy with the remaining message
+      mutex_lock(&profile->ns->lock);
+      err = pyr_deserialize_lib_policy(profile, msg);
       mutex_unlock(&profile->ns->lock);
+      if (err) {
+	PYR_DEBUG("couldn't deserialize lib policy\n");
+	valid_pid = 0;
+	goto out;
+      }
+      pyr_get_profile(profile);
     }
 
     printk(KERN_INFO "[%s] userspace at port %d registered SI port ID: %d\n", __func__, info->snd_portid, snd_port);
@@ -261,7 +262,7 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
 
   if (info->snd_portid != callstack_req->port_id) {
     // this is going to cause the callstack request to continue blocking
-    PYR_DEBUG("[%s] Inconsistent runtime IDs. Got %d, expected %d\n", __func__, );
+    PYR_DEBUG("[%s] Inconsistent runtime IDs. Got %d, expected %d\n", __func__, callstack_req->port_id, info->snd_portid);
     goto out;
   }
 
