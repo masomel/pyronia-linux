@@ -372,11 +372,12 @@ void pyr_free_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
 }
 
 // Deserialize a lib policy string received from userspace
+// profile is NOT NULL
 int pyr_deserialize_lib_policy(struct pyr_profile *profile,
                                char *lp_str) {
-    int err;
+    int err = 0;
     char *next_rule, *num_str, *next_lib, *next_name;
-    u32 num_rules, next_perms, count = 0;
+    u32 num_rules = 0, next_perms = 0, count = 0;
     enum acl_entry_type next_type;
     
     // first token in the string is the number of lib policy

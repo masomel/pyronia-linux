@@ -38,26 +38,30 @@ static struct genl_family si_comm_gnl_family = {
 };
 
 static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
-    struct sk_buff *skb;
-    void *msg_head;
+    struct sk_buff *skb = NULL;
+    void *msg_head = NULL;
     int ret = -1;
     char buf[12];
+    u16 flags = 0;
 
      // allocate the message memory
     skb = genlmsg_new(NLMSG_GOODSIZE, GFP_KERNEL);
     if (skb == NULL) {
-        printk(KERN_ERR "[%s] Could not allocate skb for cmd message %d for port %d\n",
-               __func__, cmd, port_id);
+        PYR_ERROR("[%s] Could not allocate skb for cmd message %d for port %d\n",
+		  __func__, cmd, port_id);
         goto out;
     }
 
+    if (cmd == SI_COMM_C_STACK_REQ && attr == SI_COMM_A_KERN_REQ) {
+      flags |= NLM_F_REQUEST;
+    }
+    
     //Create the message headers
-    msg_head = genlmsg_put(skb, 0, 0, &si_comm_gnl_family,
-                           0, cmd);
-
+    msg_head = genlmsg_put(skb, 0, 0, &si_comm_gnl_family, flags, cmd);
+    
     if (msg_head == NULL) {
         ret = -ENOMEM;
-        printk("[%s] genlmsg_put() returned error for %d\n", __func__, port_id);
+        PYR_ERROR("[%s] genlmsg_put() returned error for %d\n", __func__, port_id);
         goto out;
     }
 
@@ -65,32 +69,31 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
       // create the message
       ret = nla_put_u8(skb, attr, STACK_REQ_CMD);
       if (ret != 0) {
-        printk(KERN_ERR "[%s] Could not create the message for %d\n", __func__, port_id);
+        PYR_ERROR("[%s] Could not create the message for %d\n", __func__, port_id);
         goto out;
       }
+      PYR_DEBUG("[%s] Created KERN_REQ\n", __func__);
     }
     else {
       sprintf(buf, "%d", msg);
       ret = nla_put_string(skb, SI_COMM_A_USR_MSG, buf);
       if (ret != 0)
         goto out;
+      PYR_DEBUG("[%s] Created USR_MSG\n", __func__);
     }
 
     // finalize the message
     genlmsg_end(skb, msg_head);
-
+    
     // send the message
-    ret = nlmsg_unicast(init_net.genl_sock, skb, port_id);
+    ret = genlmsg_unicast(&init_net, skb, port_id);
     if (ret < 0) {
-        printk("[%s] Error %d sending message to %d\n", __func__, ret, port_id);
+        PYR_ERROR("[%s] Error %d sending message to %d\n", __func__, ret, port_id);
         goto out;
     }
     ret = 0;
-
+    
  out:
-    if (ret) {
-        // TODO: release the kraken here
-    }
     return ret;
 }
 
@@ -100,7 +103,7 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
  * Expects the caller to hold the stack_request lock. */
 pyr_cg_node_t *pyr_stack_request(u32 pid)
 {
-    int err;
+    int err = 0;
     pyr_cg_node_t *cg = NULL;
 
     if (!pid) {
@@ -121,12 +124,16 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
 
     callstack_req->runtime_responded = 0;
 
+    PYR_DEBUG("[%s] Waiting for upcall response\n", __func__);
+    
     wait_event_interruptible(callstack_req_waitq, callstack_req->runtime_responded == 1);
 
     if (!callstack_req->cg_buf) {
       goto out;
     }
 
+    PYR_DEBUG("[%s] Received message %s\n", __func__, callstack_req->cg_buf);
+    
     // deserialize the callstack we've received from userland
     if (pyr_deserialize_callstack(&cg, callstack_req->cg_buf)) {
         goto out;
@@ -247,17 +254,17 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
 
   if (info == NULL)
     goto out;
-
+  
   /* for each attribute there is an index in info->attrs which points
    * to a nlattr structure in this structure the data is given */
   na = info->attrs[SI_COMM_A_USR_MSG];
   if (na) {
     mydata = (char *)nla_data(na);
     if (mydata == NULL)
-      printk(KERN_ERR "[%s] error while receiving data\n", __func__);
+      PYR_ERROR("[%s] error while receiving data\n", __func__);
   }
   else
-    printk(KERN_CRIT "[%s] no info->attrs %i\n", __func__, SI_COMM_A_USR_MSG);
+    PYR_ERROR("[%s] no info->attrs %i\n", __func__, SI_COMM_A_USR_MSG);
 
 
   if (info->snd_portid != callstack_req->port_id) {
@@ -267,10 +274,11 @@ static int pyr_get_callstack(struct sk_buff *skb, struct genl_info *info) {
   }
 
   memcpy(callstack_req->cg_buf, mydata, MAX_RECV_LEN);
-  callstack_req->runtime_responded = 1;
-  wake_up_interruptible(&callstack_req_waitq);
 
  out:
+  send_to_runtime(info->snd_portid, SI_COMM_C_STACK_REQ, SI_COMM_A_USR_MSG, 0);
+  callstack_req->runtime_responded = 1;
+  wake_up_interruptible(&callstack_req_waitq);
   return 0;
 }
 

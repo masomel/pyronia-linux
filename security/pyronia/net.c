@@ -174,6 +174,8 @@ static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
     int in_addr, printed_bytes;
     char ip_str[16];
 
+    // TODO: we might get a junk address, so fail gracefully
+    
     if (sa->sa_family == AF_INET) {
         in_addr = (int)((struct sockaddr_in*)sa)->sin_addr.s_addr;
 
@@ -222,8 +224,6 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
         if (!unconfined(profile)) {
             error = pyr_net_perm(op, profile, sk->sk_family, sk->sk_type,
                                  sk->sk_protocol, sk);
-
-            PYR_DEBUG("[%s] Profile %s using pyronia? %d\n", __func__, profile->base.name, profile->using_pyronia);
 
             // Pyronia hook: check the call stack to determine
             // if the requesting library has permissions to

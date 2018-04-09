@@ -234,6 +234,9 @@ u32 pyr_get_allow_file_perms(struct pyr_profile *profile,
     unsigned int state;
     u32 perms;
 
+    if (!profile || !name)
+      return 0;
+    
     state = pyr_dfa_match(profile->file.dfa, profile->file.start, name);
     perms = map_old_perms(dfa_user_allow(profile->file.dfa, state));
     perms |= PYR_MAY_META_READ;

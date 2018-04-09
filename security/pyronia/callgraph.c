@@ -61,6 +61,7 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     // In this initial call, it means the root already doesn't have
     // permission to access name, so let's bail early
     if (eff_perm == TRANSITIVE_LIB_POLICY) {
+        eff_perm = 0;
         goto out;
     }
 
@@ -112,9 +113,9 @@ void pyr_free_callgraph(pyr_cg_node_t **cg_root) {
 // Deserialize a callstack-string received from userspace
 int pyr_deserialize_callstack(pyr_cg_node_t **root, char *cs_str) {
     pyr_cg_node_t *cur_node = NULL, *next_node = NULL;
-    int err;
+    int err = 0;
     char *next_lib, *num_str;
-    u32 num_nodes, count = 0;
+    u32 num_nodes = 0, count = 0;
 
     // first token in the string is the number of callstack
     // layers to expect
