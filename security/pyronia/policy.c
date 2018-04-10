@@ -585,6 +585,7 @@ void pyr_free_replacedby_kref(struct kref *kref)
  */
 void pyr_free_profile_lib_policy(struct pyr_profile *profile) {
   if (profile && profile->using_pyronia) {
+    PYR_DEBUG("[%s] Pyronia cleanup\n", __func__);
     profile->using_pyronia = 0;
     profile->port_id = 0;
     pyr_free_lib_policy_db(&profile->lib_perm_db);
