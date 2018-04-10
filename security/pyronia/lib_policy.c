@@ -51,7 +51,7 @@ static void free_lib_policy(struct pyr_lib_policy **policy) {
     if (p == NULL) {
       return;
     }
-
+        
     if (p->next != NULL) {
       free_lib_policy(&p->next);
     }
@@ -111,6 +111,8 @@ static int pyr_add_acl_entry(struct pyr_acl_entry **acl,
     // insert at head of linked list
     new_entry->next = *acl;
     *acl = new_entry;
+
+    PYR_DEBUG("[%s] Added ACL entry %p for %s, next %p\n", __func__, *acl, name, (*acl)->next);
     
     return 0;
  fail:
@@ -210,6 +212,10 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *policy_db,
 	  goto fail;
 	policy->acl = NULL;
 	policy->next = NULL;
+
+	// insert at head of linked list
+	policy->next = policy_db->perm_db_head;
+	policy_db->perm_db_head = policy;
     }
 
     acl = pyr_find_acl_entry(policy->acl, name);
@@ -232,10 +238,9 @@ int pyr_add_lib_policy(struct pyr_lib_policy_db *policy_db,
             goto fail;
     }
 
-    // insert at head of linked list
-    policy->next = policy_db->perm_db_head;
-    policy_db->perm_db_head = policy;
+    PYR_DEBUG("[%s] Added policy %p for %s, next %p\n", __func__, policy_db->perm_db_head, lib, policy_db->perm_db_head->next);
 
+    
  out:
     return 0;
  fail:
@@ -369,10 +374,13 @@ int pyr_new_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
 // Recursively frees all lib policies and their ACL entries
 void pyr_free_lib_policy_db(struct pyr_lib_policy_db **policy_db) {
     struct pyr_lib_policy_db *db = *policy_db;
+    
+    if (db == NULL)
+      return;
+
     free_lib_policy(&db->perm_db_head);
     free_acl_entry(&db->defaults);
     kvfree(db);
-    db= NULL;
     *policy_db = NULL;
 }
 
@@ -451,8 +459,11 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
 
     // the string was somehow corrupted b/c we got fewer valid rules than
     // originally indicated
-    if (num_rules > 0 && count < num_rules)
+    if (num_rules > 0 && count < num_rules) {
+        PYR_ERROR("[%s] Expected %d, got %d rules\n", __func__, num_rules, count);
+	err = -1;
         goto fail;
+    }
 
     return 0;
  fail:

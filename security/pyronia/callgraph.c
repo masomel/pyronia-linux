@@ -50,7 +50,7 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     int err = 0;
     u32 eff_perm = 0;
 
-    pritnk(KERN_INFO "[%s] Computing permissions for %s... \n", __func__, name);
+    printk(KERN_INFO "[%s] Computing permissions for %s... \n", __func__, name);
 
     eff_perm = pyr_get_lib_perms(lib_policy_db, cur_node->lib, name);
 

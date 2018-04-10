@@ -11,7 +11,7 @@ cd $HOME
 
 echo "*** Running End-to-End Pyronia Tests***"
 
-#./kernel_upcall_test
+./kernel_upcall_test
 ./file_access_test
-#./network_access_test
-#./callgraph_perms_fail_test
+./network_access_test
+./callgraph_perms_fail_test

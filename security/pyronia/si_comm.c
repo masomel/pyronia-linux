@@ -111,8 +111,6 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
 
     callstack_req->port_id = pid;
 
-    printk(KERN_INFO "[%s] Requesting callstack from runtime at %d\n", __func__, callstack_req->port_id);
-
     err = send_to_runtime(callstack_req->port_id, SI_COMM_C_STACK_REQ,
                           SI_COMM_A_KERN_REQ, STACK_REQ_CMD);
 
@@ -208,7 +206,7 @@ static int pyr_register_proc(struct sk_buff *skb,  struct genl_info *info)
       err = pyr_init_profile_lib_policy(profile, snd_port);
       if (err) {
 	valid_pid = 0;
-	PYR_ERROR("couldn't init lib policy db for the task\n", __func__);
+	PYR_ERROR("[%s] couldn't init lib policy db for the task\n", __func__);
 	goto out;
       }
       // load the library policy with the remaining message
