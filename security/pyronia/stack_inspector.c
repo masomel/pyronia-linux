@@ -30,8 +30,6 @@ int pyr_callstack_request_alloc(struct pyr_callstack_request **req) {
   mutex_init(&r->req_mutex);
   
   *req = r;
-
-  PYR_DEBUG("[%s] Allocated new callstack request\n", __func__);
   return 0;
  fail:
   kvfree(r);
@@ -68,8 +66,6 @@ void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
   pyr_cg_node_t *callgraph = NULL;
   u32 perms = 0;
   struct pyr_callstack_request *req;
-
-  PYR_DEBUG("[%s] Get current callstack request metadata\n", __func__);
   
   // upcall to language runtime for callstack
   req = pyr_get_current_callstack_request();
@@ -77,8 +73,6 @@ void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
     PYR_ERROR("[%s] Null callstack_request metadata struct\n", __func__);
     goto out;
   }
-
-  PYR_DEBUG("[%s] Make upcall to userland\n", __func__);
   
   mutex_lock(&req->req_mutex);
   callgraph = pyr_stack_request(port_id);
@@ -87,8 +81,6 @@ void pyr_inspect_callstack(u32 port_id, struct pyr_lib_policy_db *lib_perm_db,
      PYR_ERROR("Could not get callstack from runtime for library %s for runtime %d\n", name, port_id);
     goto out;
   }
-
-  PYR_DEBUG("[%s] Compute library permissions\n", __func__);
 
   // compute the effective permissions given the callstack and
   // recorded library permissions

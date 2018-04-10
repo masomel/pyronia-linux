@@ -28,8 +28,8 @@ int pyr_new_cg_node(pyr_cg_node_t **cg_root, const char* lib,
         goto fail;
     }
 
-    n->lib = kvzalloc(strlen(lib)+1);
-    memcpy(n->lib, lib, strlen(lib));
+    if (set_str(lib, &n->lib))
+      goto fail;
     n->data_type = data_type;
     n->child = child;
 
@@ -50,11 +50,9 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     int err = 0;
     u32 eff_perm = 0;
 
-    PYR_DEBUG("Callgraph - Computing permissions for %s... \n", name);
+    pritnk(KERN_INFO "[%s] Computing permissions for %s... \n", __func__, name);
 
     eff_perm = pyr_get_lib_perms(lib_policy_db, cur_node->lib, name);
-
-    PYR_DEBUG("Callgraph - Initial permissions for %s: %d\n", name, eff_perm);
 
     // a return value of TRANSITIVE_LIB_POLICY from pyr_get_lib_perms
     // means that we don't have a policy for the library.
@@ -69,8 +67,6 @@ int pyr_compute_lib_perms(struct pyr_lib_policy_db *lib_policy_db,
     while (cur_node != NULL) {
         // take the intersection of the permissions
         eff_perm &= pyr_get_lib_perms(lib_policy_db, cur_node->lib, name);
-
-        PYR_DEBUG("Callgraph - Current effective permissions for %s: %d\n", name, eff_perm);
 
         // bail early since the callgraph so far already doesn't have
         // access to `name`
@@ -94,14 +90,12 @@ static void free_node(pyr_cg_node_t **node) {
       return;
     }
 
-    if (n->child == NULL) {
-        n->lib = NULL;
-        kvfree(n->lib);
-        kvfree(n);
+    if (n->child != NULL) {
+      free_node(&n->child);
     }
-    else {
-        free_node(&(n->child));
-    }
+    
+    kvfree(n->lib);
+    kvfree(n);
     *node = NULL;
 }
 

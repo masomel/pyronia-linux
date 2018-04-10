@@ -298,8 +298,8 @@ int pyr_path_perm(int op, struct pyr_profile *profile, const struct path *path,
 {
         char *buffer = NULL;
         struct file_perms perms = {};
-        u32 lib_perms;
-        const char *name, *info = NULL;
+        u32 lib_perms = 0;
+        const char *name = NULL, *info = NULL;
         int error;
 
         flags |= profile->path_flags | (S_ISDIR(cond->mode) ? PATH_IS_DIR : 0);

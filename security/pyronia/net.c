@@ -171,14 +171,15 @@ int pyr_revalidate_sk(int op, struct sock *sk)
 
 static void in_addr_to_str(struct sockaddr *sa, const char**addr_str)
 {
-    int in_addr, printed_bytes;
-    char ip_str[16];
+    int in_addr = 0, printed_bytes = 0;
+    char ip_str[INET_ADDRSTRLEN+1];
 
     // TODO: we might get a junk address, so fail gracefully
     
     if (sa->sa_family == AF_INET) {
         in_addr = (int)((struct sockaddr_in*)sa)->sin_addr.s_addr;
 
+	memset(ip_str, 0, INET_ADDRSTRLEN+1);
         printed_bytes = snprintf(ip_str, INET_ADDRSTRLEN, "%d.%d.%d.%d",
                                  (in_addr & 0xFF),
                                  ((in_addr & 0xFF00) >> 8),
@@ -210,9 +211,9 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
 {
         struct pyr_profile *profile;
         int error = 0;
-        unsigned short sock_family;
-        u32 lib_op;
-        const char *addr;
+        unsigned short sock_family = 0;
+        u32 lib_op = 0;
+        const char *addr = NULL;
 
         /* pyr_revalidate_sk should not be called from interrupt context
          * don't mediate these calls as they are not task related
@@ -238,13 +239,15 @@ int pyr_revalidate_sk_addr(int op, struct sock *sk, struct sockaddr *address)
                 // make sure we have an address to check
                 if (address == NULL) {
                     PYR_ERROR("Net - No address to check\n");
-                    addr = "";
+                    error = -EACCES;
+		    goto out;
                 }
                 else {
                     in_addr_to_str(address, &addr);
                     if (addr == NULL) {
                         PYR_ERROR("Net - Failed to convert IP address to string\n");
-                        addr = "";
+                        error = -EACCES;
+			goto out;
                     }
                 }
 
