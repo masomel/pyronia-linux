@@ -1549,6 +1549,7 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
             current->mmap_memdom_id = -1; // reset to -1
 	}
         else {
+            slog(KERN_INFO, "[%s] vma not memdom protected\n", __func__);
             vma->memdom_id = MAIN_THREAD;
  	}
 
