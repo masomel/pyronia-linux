@@ -438,7 +438,7 @@ static inline void smv_mprotect_all_vmas(struct task_struct *tsk,
   mutex_unlock(&mm->smv_metadataMutex);
   
   if (!smv) {
-    printk(KERN_ERR "[%s] smv %p does not exist.\n", __func__, smv);
+    printk(KERN_ERR "[%s] No smv found for smv ID %d.\n", __func__, smv_id);
     return;
   }
   
