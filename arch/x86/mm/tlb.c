@@ -13,7 +13,7 @@
 #include <asm/apic.h>
 #include <asm/uv/uv.h>
 #include <linux/debugfs.h>
-#include <linux/smv.h>
+
 /*
  *	Smarter SMP flushing macros.
  *		c/o Linus Torvalds.
@@ -111,7 +111,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 * ordering guarantee we need.
 		 *
 		 */
-                if (next->using_smv && tsk->smv_id != MAIN_THREAD) {
+                if (next->using_smv && tsk->smv_id > MAIN_THREAD) {
                     load_cr3(next->pgd_smv[tsk->smv_id]);
                 }
                 else {
@@ -131,7 +131,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 * Load the LDT, if the LDT is different.
 		 *
 		 * It's possible that prev->context.ldt doesn't match
-		 * the LDT register.  This can happen if leave_mm(prev)
+		 * the LDT register.  This can happen if leave_mm(prev) No such keg: /usr/local/Cellar/python2.7
 		 * was called and then modify_ldt changed
 		 * prev->context.ldt but suppressed an IPI to this CPU.
 		 * In this case, prev->context.ldt != NULL, because we
@@ -168,7 +168,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			 * As above, load_cr3() is serializing and orders TLB
 			 * fills with respect to the mm_cpumask write.
 			 */
-                        if (next->using_smv && tsk->smv_id != MAIN_THREAD) {
+                        if (next->using_smv && tsk->smv_id > MAIN_THREAD) {
                             load_cr3(next->pgd_smv[tsk->smv_id]);
                         }
                         else {

@@ -5,6 +5,8 @@
 #include <linux/rmap.h>
 #include <linux/smv.h>
 
+#include "internal.h"
+
 /* Check whether current fault is a valid smv page fault.
  * Return 1 if it's a valid smv fault, 0 to block access 
  */
@@ -161,18 +163,22 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     /* Skip copying pte if two ptes refer to the same page and 
      * specify the same access privileges */
     if ( !pte_same(*src_pte, *dst_pte) ) {
+        /*
+	 * If it's a COW mapping, write protect it both
+	 * in the parent and the child
+	 */
+	if (is_cow_mapping(vma->vm_flags)) {
+		ptep_set_wrprotect(mm, address, src_pte);
+		*dst_pte = pte_wrprotect(*dst_pte);
+	}
+      
         page = vm_normal_page(vma, address, *src_pte);       
         /* Update data page statistics */
         if ( page ) {
             init_rss_vec(rss);
             get_page(page);
             page_dup_rmap(page, false);
-	    if ( PageAnon(page) ) {
-	      rss[MM_ANONPAGES]++;
-	    }
-	    else{
-	      rss[MM_FILEPAGES]++;
-	    }
+	    rss[mm_counter(page)]++;
     	    add_mm_rss_vec(mm, rss);
         }
         slog(KERN_INFO, "[%s] src_pte 0x%16lx(smv %d) != dst_pte 0x%16lx (smv %d) for addr 0x%16lx\n", __func__, pte_val(*src_pte), src_smv, pte_val(*dst_pte), dst_smv, address);

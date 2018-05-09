@@ -78,7 +78,7 @@ int memdom_create(void){
     bitmap_zero(memdom->smv_bitmapWrite, SMV_ARRAY_SIZE);
     bitmap_zero(memdom->smv_bitmapExecute, SMV_ARRAY_SIZE);
     bitmap_zero(memdom->smv_bitmapAllocate, SMV_ARRAY_SIZE);
-    memset(memdom->pgprot, 0, SMV_ARRAY_SIZE);
+    memset(memdom->pgprot, 0, sizeof(memdom->pgprot));
     mutex_init(&memdom->memdom_mutex);
 
     /* Record this new memdom to mm */
@@ -491,7 +491,12 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
 
     if( memdom_id < 0 || memdom_id > LAST_MEMDOM_INDEX ) {
         printk(KERN_ERR "[%s] Error, out of bound: memdom %d\n", __func__, memdom_id);
-        return -1;
+        return 0;
+    }
+
+    if (smv_id < 0 || smv_id > LAST_SMV_INDEX) {
+        printk(KERN_ERR "[%s] Error, out of bound: smv %d\n", __func__, smv_id);
+        return 0;
     }
 
     mutex_lock(&mm->smv_metadataMutex);
@@ -501,7 +506,7 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
 
     if (!memdom || !smv) {
         printk(KERN_ERR "[%s] memdom %p || smv %p not found\n", __func__, memdom, smv);
-        return -1;
+        return 0;
     }
 
     /* Get privilege info */

@@ -47,25 +47,23 @@ int smv_main_init(void){
       printk(KERN_ERR "[%s] memdom %d not available for main thread\n", __func__, MAIN_THREAD);
       return -1;
     }
-
-    current->smv_id = MAIN_THREAD;       // main thread is using MAIN_THREAD-th (0) smv_id
-    current->mmap_memdom_id = MAIN_THREAD;  // main thread is using MAIN_THREAD-th (0) as mmap_id
     
-    /* Make the global smv join the global memdom with full privileges */
-    smv_join_memdom(memdom_id, smv_id);
-    memdom_priv_add(memdom_id, smv_id, MEMDOM_READ | MEMDOM_WRITE | MEMDOM_EXECUTE | MEMDOM_ALLOCATE);
-
     /* Initialize mm-related metadata */
     mutex_lock(&mm->smv_metadataMutex);
     mm->pgd_smv[MAIN_THREAD] = mm->pgd; // record the main thread's pgd
     mm->page_table_lock_smv[MAIN_THREAD] = mm->page_table_lock; // record the main thread's pgtable lock
-
+    current->smv_id = MAIN_THREAD;       // main thread is using MAIN_THREAD-th (0) smv_id
+    current->mmap_memdom_id = MAIN_THREAD;  // main thread is using MAIN_THREAD-th (0) as mmap_id
+    
     /* make all existing vma in memdom_id: MAIN_THREAD */
     memdom_claim_all_vmas(MAIN_THREAD);
     
     mutex_unlock(&mm->smv_metadataMutex);
 
-    //return memdom_mprotect_all_vmas(memdom_id, smv_id);
+    /* Make the global smv join the global memdom with full privileges */
+    smv_join_memdom(memdom_id, smv_id);
+    memdom_priv_add(memdom_id, smv_id, MEMDOM_READ | MEMDOM_WRITE | MEMDOM_EXECUTE | MEMDOM_ALLOCATE);
+
     return 0;
 }
 EXPORT_SYMBOL(smv_main_init);
@@ -111,7 +109,7 @@ int smv_create(void){
     /* Increase total number of smv count in mm_struct */
     atomic_inc(&mm->num_smvs);
 
-    slog(KERN_INFO, "Created new smv with ID %d, #smvs: %d / %d\n",
+    printk(KERN_INFO "Created new smv with ID %d, #smvs: %d / %d\n",
             smv_id, atomic_read(&mm->num_smvs), SMV_ARRAY_SIZE);
     goto out;
 
@@ -119,7 +117,7 @@ err:
     printk(KERN_ERR "Too many smvs, cannot create more.\n");
     smv_id = -1;
 out:
-    slog(KERN_INFO, "[%s] After smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n",
+    printk(KERN_INFO "[%s] After smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n",
             __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
 
     mutex_unlock(&mm->smv_metadataMutex);
@@ -412,7 +410,7 @@ pgd_t *smv_alloc_pgd(struct mm_struct *mm, int smv_id){
     /* Assign page table directory to mm_struct for smv_id */
     mm->pgd_smv[smv_id] = pgd;
 
-    slog(KERN_INFO, "[%s] smv %d pgd %p\n", __func__, smv_id, mm->pgd_smv[smv_id]);
+    printk(KERN_INFO "[%s] smv %d pgd %p\n", __func__, smv_id, mm->pgd_smv[smv_id]);
     return pgd;
 }
 
@@ -471,8 +469,7 @@ void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk,
         return;
     }
 
-    slog(KERN_INFO, "[%s] switching from smv %d (using smv? %d) to smv %d\n", __func__, prev_tsk->smv_id, prev_mm->using_smv, next_tsk->smv_id);
-    
+    slog(KERN_INFO, "[%s] switching from task %d running in smv %d (using smv? %d) to smv %d\n", __func__, prev_tsk->pid, prev_tsk->smv_id, prev_mm->using_smv, next_tsk->smv_id);
     smv_mprotect_all_vmas(next_tsk, next_mm, next_tsk->smv_id);
 }
 
