@@ -29,7 +29,7 @@
 #include <linux/types.h>
 #include <linux/smv_mm.h>
 
-#define SMV_LOGGING
+//#define SMV_LOGGING
 #ifdef SMV_LOGGING
 #define slog(level, fmt, args...) printk(level fmt, ##args)
 #else
@@ -53,7 +53,7 @@ pgd_t *smv_alloc_pgd(struct mm_struct *mm, int smv_id);
 void smv_free_pgd(struct mm_struct *mm, int smv_id);
 void smv_free_pgtables(struct mmu_gather *tlb, struct vm_area_struct *vma,
                     		unsigned long floor, unsigned long ceiling);
-void switch_smv(struct task_struct *prev_tsk, struct task_struct *next_tsk, struct mm_struct *prev_mm, struct mm_struct *next_mm);
+void switch_smv(struct task_struct *next_tsk, struct mm_struct *next_mm);
 void smv_free_mmap(struct mm_struct *mm, int smv_id);
 
 /// --- Functions exported to user space to manage metadata --- ///

@@ -111,7 +111,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 * ordering guarantee we need.
 		 *
 		 */
-                if (next->using_smv && tsk->smv_id > MAIN_THREAD) {
+                if (next->using_smv && tsk->smv_id >= MAIN_THREAD) {
                     load_cr3(next->pgd_smv[tsk->smv_id]);
                 }
                 else {
@@ -168,7 +168,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			 * As above, load_cr3() is serializing and orders TLB
 			 * fills with respect to the mm_cpumask write.
 			 */
-                        if (next->using_smv && tsk->smv_id > MAIN_THREAD) {
+                        if (next->using_smv && tsk->smv_id >= MAIN_THREAD) {
                             load_cr3(next->pgd_smv[tsk->smv_id]);
                         }
                         else {
