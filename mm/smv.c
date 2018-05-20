@@ -294,17 +294,17 @@ int smv_is_in_memdom(int memdom_id, int smv_id){
 
     down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
+    up_read(&mm->smv_metadataMutex);
 
     if( !smv ) {
         printk(KERN_ERR "[%s] smv %p not found\n", __func__, smv);
         return 0;
     }
-    //mutex_lock(&smv->smv_mutex);
+    mutex_lock(&smv->smv_mutex);
     if( test_bit(memdom_id, smv->memdom_bitmapJoin) ) {
         in = 1;
     }
-    //mutex_unlock(&smv->smv_mutex);
-    up_read(&mm->smv_metadataMutex);
+    mutex_unlock(&smv->smv_mutex);
     return in;
 }
 EXPORT_SYMBOL(smv_is_in_memdom);
@@ -360,9 +360,9 @@ int register_smv_thread(int smv_id){
 
     /* Update number of tasks running in the smv */
     // TODO: Call atomic_dec when task exits the system
-    //mutex_lock(&mm->smv_metadata[smv_id]->smv_mutex);
+    mutex_lock(&mm->smv_metadata[smv_id]->smv_mutex);
     atomic_inc(&mm->smv_metadata[smv_id]->ntask);
-    //mutex_unlock(&mm->smv_metadata[smv_id]->smv_mutex);
+    mutex_unlock(&mm->smv_metadata[smv_id]->smv_mutex);
 
     up_write(&mm->smv_metadataMutex);
     return 0;
