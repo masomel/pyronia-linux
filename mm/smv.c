@@ -49,7 +49,7 @@ int smv_main_init(void){
     }
     
     /* Initialize mm-related metadata */
-    spin_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
     mm->pgd_smv[MAIN_THREAD] = mm->pgd; // record the main thread's pgd
     mm->page_table_lock_smv[MAIN_THREAD] = mm->page_table_lock; // record the main thread's pgtable lock
     current->smv_id = MAIN_THREAD;       // main thread is using MAIN_THREAD-th (0) smv_id
@@ -58,7 +58,7 @@ int smv_main_init(void){
     /* make all existing vma in memdom_id: MAIN_THREAD */
     memdom_claim_all_vmas(MAIN_THREAD);
     
-    spin_unlock(&mm->smv_metadataMutex);
+    up_write(&mm->smv_metadataMutex);
 
     /* Make the global smv join the global memdom with full privileges */
     smv_join_memdom(memdom_id, smv_id);
@@ -75,7 +75,7 @@ int smv_create(void){
     struct smv_struct *smv = NULL;
 
     /* SMP: protect shared smv bitmap */
-    spin_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
 
     slog(KERN_INFO, "[%s] Before smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n",
             __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
@@ -120,7 +120,7 @@ out:
     slog(KERN_INFO, "[%s] After smv_create mm: %p, nr_pmds: %ld, nr_ptes: %ld\n",
             __func__, mm, atomic_long_read(&mm->nr_pmds), atomic_long_read(&mm->nr_ptes));
 
-    spin_unlock(&mm->smv_metadataMutex);
+    up_write(&mm->smv_metadataMutex);
     return smv_id;
 }
 EXPORT_SYMBOL(smv_create);
@@ -142,7 +142,7 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     }
 
     /* SMP: protect shared smv bitmap */
-    spin_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
     smv = mm->smv_metadata[smv_id];
 
     slog(KERN_INFO, "[%s] killing smv metadata %p with ID %d\n", __func__, smv, smv_id);
@@ -151,10 +151,10 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     /* Clear smv_id-th bit in mm's smv_bitmapInUse */
     if( test_bit(smv_id, mm->smv_bitmapInUse) ) {
         clear_bit(smv_id, mm->smv_bitmapInUse);
-        spin_unlock(&mm->smv_metadataMutex);
+        up_write(&mm->smv_metadataMutex);
     } else {
         printk(KERN_ERR "Error, trying to delete a smv that does not exist: smv %d, #smvs: %d\n", smv_id, atomic_read(&mm->num_smvs));
-        spin_unlock(&mm->smv_metadataMutex);
+        up_write(&mm->smv_metadataMutex);
         return -1;
     }
 
@@ -183,10 +183,10 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     free_smv(smv);
 
     /* Decrement smv count */
-    spin_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
     mm->smv_metadata[smv_id] = NULL;
     atomic_dec(&mm->num_smvs);
-    spin_unlock(&mm->smv_metadataMutex);
+    up_write(&mm->smv_metadataMutex);
 
     slog(KERN_INFO, "[%s] Deleted smv with ID %d, #smvs: %d / %d\n",
             __func__, smv_id, atomic_read(&mm->num_smvs), SMV_ARRAY_SIZE);
@@ -216,15 +216,15 @@ int smv_join_memdom(int memdom_id, int smv_id){
         return -1;
     }
 
-    spin_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
     memdom = current->mm->memdom_metadata[memdom_id];
     if( !memdom || !smv ) {
         printk(KERN_ERR "[%s] memdom %d: %p || smv %d: %p not found\n", __func__, memdom_id, memdom, smv_id, smv);
-        spin_unlock(&mm->smv_metadataMutex);
+        up_read(&mm->smv_metadataMutex);
         return -1;
     }
-    spin_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     mutex_lock(&smv->smv_mutex);
     set_bit(memdom_id, smv->memdom_bitmapJoin);
@@ -253,10 +253,10 @@ int smv_leave_memdom(int memdom_id, int smv_id, struct mm_struct *mm){
     }
 
     /* Get the actual memdom and smv struct from this mm */
-    spin_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     memdom = mm->memdom_metadata[memdom_id];
     smv = mm->smv_metadata[smv_id];
-    spin_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
     if( !memdom || !smv ) {
         printk(KERN_ERR "[%s] memdom %p || smv %p not found\n", __func__, memdom, smv);
         return -1;
@@ -292,19 +292,19 @@ int smv_is_in_memdom(int memdom_id, int smv_id){
         return 0;
     }
 
-    spin_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
-    spin_unlock(&mm->smv_metadataMutex);
 
     if( !smv ) {
         printk(KERN_ERR "[%s] smv %p not found\n", __func__, smv);
         return 0;
     }
-    mutex_lock(&smv->smv_mutex);
+    //mutex_lock(&smv->smv_mutex);
     if( test_bit(memdom_id, smv->memdom_bitmapJoin) ) {
         in = 1;
     }
-    mutex_unlock(&smv->smv_mutex);
+    //mutex_unlock(&smv->smv_mutex);
+    up_read(&mm->smv_metadataMutex);
     return in;
 }
 EXPORT_SYMBOL(smv_is_in_memdom);
@@ -321,9 +321,9 @@ int smv_exists(int smv_id){
 
     /* TODO: add privilege checks */
 
-    spin_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
-    spin_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     if( !smv ) {
         printk(KERN_ERR "[%s] smv %p does not exist.\n", __func__, smv);
@@ -350,21 +350,21 @@ int register_smv_thread(int smv_id){
     }
 
     /* Tell the kernel we are about to run a new thread in a smv */
-    spin_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
     if( !test_bit(smv_id, mm->smv_bitmapInUse) ) {
         printk(KERN_ERR "[%s] smv %d not found\n", __func__, smv_id);
-        spin_unlock(&mm->smv_metadataMutex);
+        up_write(&mm->smv_metadataMutex);
         return -1;
     }
     mm->standby_smv_id = smv_id;  // Will be reset to MAIN_THREAD when do_fork exits.
 
     /* Update number of tasks running in the smv */
     // TODO: Call atomic_dec when task exits the system
-    mutex_lock(&mm->smv_metadata[smv_id]->smv_mutex);
+    //mutex_lock(&mm->smv_metadata[smv_id]->smv_mutex);
     atomic_inc(&mm->smv_metadata[smv_id]->ntask);
-    mutex_unlock(&mm->smv_metadata[smv_id]->smv_mutex);
+    //mutex_unlock(&mm->smv_metadata[smv_id]->smv_mutex);
 
-    spin_unlock(&mm->smv_metadataMutex);
+    up_write(&mm->smv_metadataMutex);
     return 0;
 }
 EXPORT_SYMBOL(register_smv_thread);

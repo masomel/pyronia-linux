@@ -33,7 +33,7 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     /* Get this smv's privileges */
     privs = memdom_priv_get(memdom_id, smv_id);
 
-    slog(KERN_INFO, "[%s] error code: %lu\n", __func__, error_code);
+    printk(KERN_INFO "[%s] error code: %lu\n", __func__, error_code);
     
     /* Protection fault */
     if ( error_code & PF_PROT ) {
@@ -45,7 +45,7 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
             rv = 1;
         } else{
             printk(KERN_ERR "[%s] smv %d cannot write memdom %d\n", __func__, smv_id, memdom_id);
-            rv = 0; // Try to write a unwrittable address
+            rv = 0; // Try to write a unwritable address
         }
     }
     /* Read fault */ 
@@ -104,6 +104,15 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     int rv;
     int rss[NR_MM_COUNTERS];
 
+    /* If we're handling any kind of write fault, don't copy the
+     * page table from the main thread since we'll just undo the loading of a
+     * a writable page by do_anonymous in the destination smv's page table
+     */
+    /*    if (flags & FAULT_FLAG_WRITE) {
+      printk(KERN_INFO "[%s] smv %d just got a new writable page from do_anonymous_page. Skip\n", __func__, dst_smv);
+      return 0;
+      }*/
+
     /* Don't copy page table to the main thread */
     if ( dst_smv == MAIN_THREAD ) {
       slog(KERN_INFO, "[%s] smv %d attempts to overwrite main thread's page table. Skip\n", __func__, src_smv);
@@ -121,7 +130,7 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     }
 
     /* SMP protection */
-    mutex_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
 
     /* Source smv:
      * Page walk to obtain the source pte 
@@ -166,11 +175,12 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
         /*
 	 * If it's a COW mapping, write protect it both
 	 * in the parent and the child
-	 */
+	 
 	if (is_cow_mapping(vma->vm_flags)) {
 		ptep_set_wrprotect(mm, address, src_pte);
 		*dst_pte = pte_wrprotect(*dst_pte);
-	}
+		printk(KERN_ERR "[%s] Write protected mapping for addr 0x%16lx in dest smv %d\n", __func__, address, dst_smv);
+		}*/
       
         page = vm_normal_page(vma, address, *src_pte);       
         /* Update data page statistics */
@@ -190,9 +200,9 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
      * pgtables for destination  */   
     set_pte_at(mm, address, dst_pte, *src_pte);
 
-    slog(KERN_INFO, "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n", 
+    printk(KERN_INFO "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n", 
                 __func__, src_smv, pgd_val(*src_pgd), pud_val(*src_pud), pmd_val(*src_pmd), pte_val(*src_pte));
-    slog(KERN_INFO, "[%s] dst smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n", 
+    printk(KERN_INFO "[%s] dst smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n", 
                 __func__, dst_smv, pgd_val(*dst_pgd), pud_val(*dst_pud), pmd_val(*dst_pmd), pte_val(*dst_pte));
   
     spin_unlock(dst_ptl);
@@ -211,6 +221,6 @@ unlock_src:
         slog(KERN_INFO, "[%s] smv %d copied pte from MAIN_THREAD. addr 0x%16lx, *src_pte 0x%16lx, *dst_pte 0x%16lx\n", 
                __func__, dst_smv, address, pte_val(*src_pte), pte_val(*dst_pte));
     }
-	mutex_unlock(&mm->smv_metadataMutex);
+    up_write(&mm->smv_metadataMutex);
     return rv;
 }

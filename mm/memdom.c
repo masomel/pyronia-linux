@@ -57,13 +57,13 @@ int memdom_create(void){
     struct mm_struct *mm = current->mm;
     struct memdom_struct *memdom = NULL;
 
-    /* SMP: protect shared memdom bitmap */
-    spin_lock(&mm->smv_metadataMutex);
-
     /* Are we having too many memdoms? */
     if( atomic_read(&mm->num_memdoms) == SMV_ARRAY_SIZE ) {
         goto err;
     }
+
+    /* SMP: protect shared memdom bitmap */
+    down_write(&mm->smv_metadataMutex);
 
     /* Find available slot in the bitmap for the new smv */
     memdom_id = find_first_zero_bit(mm->memdom_bitmapInUse, SMV_ARRAY_SIZE);
@@ -98,7 +98,7 @@ err:
     printk(KERN_ERR "Too many memdoms, cannot create more.\n");
     memdom_id = -1;
 out:
-    spin_unlock(&mm->smv_metadataMutex);
+    up_write(&mm->smv_metadataMutex);
     return memdom_id;
 }
 EXPORT_SYMBOL(memdom_create);
@@ -152,7 +152,7 @@ int memdom_kill(int memdom_id, struct mm_struct *mm){
     }
 
     /* SMP: protect shared memdom bitmap */
-    spin_lock(&mm->smv_metadataMutex);
+    down_write(&mm->smv_metadataMutex);
     memdom = mm->memdom_metadata[memdom_id];
 
     /* TODO: check if current task has the permission to delete the memdom, only master thread can do this */
@@ -160,10 +160,10 @@ int memdom_kill(int memdom_id, struct mm_struct *mm){
     /* Clear memdom_id-th bit in memdom_bitmapInUse */
     if( test_bit(memdom_id, mm->memdom_bitmapInUse) ) {
         clear_bit(memdom_id, mm->memdom_bitmapInUse);
-        spin_unlock(&mm->smv_metadataMutex);
+        up_write(&mm->smv_metadataMutex);
     } else {
         printk(KERN_ERR "Error, trying to delete a memdom that does not exist: memdom %d, #memdoms: %d\n", memdom_id, atomic_read(&mm->num_memdoms));
-        spin_unlock(&mm->smv_metadataMutex);
+        up_write(&mm->smv_metadataMutex);
         return -1;
     }
 
@@ -180,9 +180,9 @@ int memdom_kill(int memdom_id, struct mm_struct *mm){
     mm->memdom_metadata[memdom_id] = NULL;
 
     /* Decrement memdom count */
-    spin_lock(&mm->smv_metadataMutex);
+    //spin_lock(&mm->smv_metadataMutex);
     atomic_dec(&mm->num_memdoms);
-    spin_unlock(&mm->smv_metadataMutex);
+    //spin_unlock(&mm->smv_metadataMutex);
 
     slog(KERN_INFO, "[%s] Deleted memdom with ID %d, #memdoms: %d / %d\n",
             __func__, memdom_id, atomic_read(&mm->num_memdoms), SMV_ARRAY_SIZE);
@@ -212,10 +212,10 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
         return -1;
     }
 
-    spin_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
     memdom = current->mm->memdom_metadata[memdom_id];
-    spin_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     if( !memdom || !smv ) {
         printk(KERN_ERR "[%s] memdom %p || smv %p not found\n", __func__, memdom, smv);
@@ -274,10 +274,10 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
         return -1;
     }
 
-    spin_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
     memdom = current->mm->memdom_metadata[memdom_id];
-    spin_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     if( !memdom || !smv ) {
         printk(KERN_ERR "[%s] memdom %p || smv %p not found\n", __func__, memdom, smv);
@@ -340,10 +340,10 @@ int memdom_priv_get(int memdom_id, int smv_id){
         return -1;
     }
 
-    spin_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
     memdom = current->mm->memdom_metadata[memdom_id];
-    spin_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     if( !memdom || !smv ) {
         printk(KERN_ERR "[%s] memdom %p || smv %p not found\n", __func__, memdom, smv);
@@ -374,9 +374,9 @@ int memdom_mmap_register(int memdom_id){
         return -1;
     }
 
-    spin_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     memdom = current->mm->memdom_metadata[memdom_id];
-    spin_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     if( !memdom ) {
         printk(KERN_ERR "[%s] memdom %p not found\n", __func__, memdom);
@@ -499,10 +499,10 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
         return 0;
     }
 
-    spin_lock(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
     memdom = current->mm->memdom_metadata[memdom_id];
-    spin_unlock(&mm->smv_metadataMutex);
+    up_read(&mm->smv_metadataMutex);
 
     if (!memdom || !smv) {
         printk(KERN_ERR "[%s] memdom %p || smv %p not found\n", __func__, memdom, smv);
