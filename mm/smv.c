@@ -294,17 +294,17 @@ int smv_is_in_memdom(int memdom_id, int smv_id){
 
     down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
+    up_read(&mm->smv_metadataMutex);
 
     if( !smv ) {
         printk(KERN_ERR "[%s] smv %p not found\n", __func__, smv);
         return 0;
     }
-    //mutex_lock(&smv->smv_mutex);
+    mutex_lock(&smv->smv_mutex);
     if( test_bit(memdom_id, smv->memdom_bitmapJoin) ) {
         in = 1;
     }
-    //mutex_unlock(&smv->smv_mutex);
-    up_read(&mm->smv_metadataMutex);
+    mutex_unlock(&smv->smv_mutex);
     return in;
 }
 EXPORT_SYMBOL(smv_is_in_memdom);

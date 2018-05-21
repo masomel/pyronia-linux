@@ -57,13 +57,13 @@ int memdom_create(void){
     struct mm_struct *mm = current->mm;
     struct memdom_struct *memdom = NULL;
 
+    /* SMP: protect shared memdom bitmap */
+    down_write(&mm->smv_metadataMutex);
+
     /* Are we having too many memdoms? */
     if( atomic_read(&mm->num_memdoms) == SMV_ARRAY_SIZE ) {
         goto err;
     }
-
-    /* SMP: protect shared memdom bitmap */
-    down_write(&mm->smv_metadataMutex);
 
     /* Find available slot in the bitmap for the new smv */
     memdom_id = find_first_zero_bit(mm->memdom_bitmapInUse, SMV_ARRAY_SIZE);
@@ -175,14 +175,14 @@ int memdom_kill(int memdom_id, struct mm_struct *mm){
         }
     } while( smv_id != SMV_ARRAY_SIZE );
 
+    down_write(&mm->smv_metadataMutex);
     /* Free the actual memdom struct */
     free_memdom(memdom);
     mm->memdom_metadata[memdom_id] = NULL;
 
     /* Decrement memdom count */
-    //spin_lock(&mm->smv_metadataMutex);
     atomic_dec(&mm->num_memdoms);
-    //spin_unlock(&mm->smv_metadataMutex);
+    up_write(&mm->smv_metadataMutex);
 
     slog(KERN_INFO, "[%s] Deleted memdom with ID %d, #memdoms: %d / %d\n",
             __func__, memdom_id, atomic_read(&mm->num_memdoms), SMV_ARRAY_SIZE);
