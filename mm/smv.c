@@ -350,21 +350,20 @@ int register_smv_thread(int smv_id){
     }
 
     /* Tell the kernel we are about to run a new thread in a smv */
-    down_write(&mm->smv_metadataMutex);
+    down_read(&mm->smv_metadataMutex);
     if( !test_bit(smv_id, mm->smv_bitmapInUse) ) {
         printk(KERN_ERR "[%s] smv %d not found\n", __func__, smv_id);
-        up_write(&mm->smv_metadataMutex);
+        up_read(&mm->smv_metadataMutex);
         return -1;
     }
+    up_read(&mm->smv_metadataMutex);
     mm->standby_smv_id = smv_id;  // Will be reset to MAIN_THREAD when do_fork exits.
 
     /* Update number of tasks running in the smv */
     // TODO: Call atomic_dec when task exits the system
-    //mutex_lock(&mm->smv_metadata[smv_id]->smv_mutex);
+    mutex_lock(&mm->smv_metadata[smv_id]->smv_mutex);
     atomic_inc(&mm->smv_metadata[smv_id]->ntask);
-    //mutex_unlock(&mm->smv_metadata[smv_id]->smv_mutex);
-
-    up_write(&mm->smv_metadataMutex);
+    mutex_unlock(&mm->smv_metadata[smv_id]->smv_mutex);
     return 0;
 }
 EXPORT_SYMBOL(register_smv_thread);
@@ -431,9 +430,9 @@ static inline void smv_mprotect_all_vmas(struct task_struct *tsk,
     return;
   }
 
-  //spin_lock(&mm->smv_metadataMutex);
+  //down_read(&mm->smv_metadataMutex);
   smv = mm->smv_metadata[smv_id];
-  //spin_unlock(&mm->smv_metadataMutex);
+  //up_read(&mm->smv_metadataMutex);
   
   if (!smv) {
     printk(KERN_ERR "[%s] No smv found for smv ID %d.\n", __func__, smv_id);
