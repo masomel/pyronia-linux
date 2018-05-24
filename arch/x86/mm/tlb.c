@@ -6,6 +6,7 @@
 #include <linux/interrupt.h>
 #include <linux/export.h>
 #include <linux/cpu.h>
+#include <linux/smv.h>
 
 #include <asm/tlbflush.h>
 #include <asm/mmu_context.h>
@@ -75,6 +76,9 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			struct task_struct *tsk)
 {
 	unsigned cpu = smp_processor_id();
+
+	/* Switch to the next smv, if necessary */
+	switch_smv(tsk, next);
 
 	if (likely(prev != next)) {
 #ifdef CONFIG_SMP

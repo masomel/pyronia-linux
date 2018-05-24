@@ -75,7 +75,6 @@
 #include <linux/compiler.h>
 #include <linux/frame.h>
 #include <linux/prefetch.h>
-#include <linux/smv.h>
 
 #include <asm/switch_to.h>
 #include <asm/tlb.h>
@@ -2870,8 +2869,6 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	}
 	else {
 	    switch_mm_irqs_off(oldmm, mm, next);
-	    /* Switch to the next smv, if necessary */
-	    switch_smv(next, mm);
 	}
 
 	if (!prev->mm) {
