@@ -619,6 +619,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
     memset(mm->pgd_smv, 0, sizeof(pgd_t)*SMV_ARRAY_SIZE);
     mm->using_smv = 0;
     mm->standby_smv_id = -1;
+    mm->protected_vmas = NULL;
 
 	mm->mmap = NULL;
 	mm->mm_rb = RB_ROOT;

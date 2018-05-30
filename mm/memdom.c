@@ -527,10 +527,11 @@ extern int do_mprotect (struct task_struct *tsk, unsigned long start,
 */
 int memdom_mprotect_all_vmas(struct task_struct *tsk, struct mm_struct *mm,
 			     int memdom_id, int smv_id) {
-    struct vm_area_struct *vma;
+    struct memdom_vma *vm_memdom = NULL;
     int error = 0;
     struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
+    struct vm_area_struct *vma = NULL;
 
     if( memdom_id < 0 || memdom_id > LAST_MEMDOM_INDEX ) {
       printk(KERN_ERR "[%s] Error, out of bound: memdom %d\n", __func__, memdom_id);
@@ -547,8 +548,9 @@ int memdom_mprotect_all_vmas(struct task_struct *tsk, struct mm_struct *mm,
     }
 
     //mutex_lock(&memdom->memdom_mutex);
-    for (vma = mm->mmap; vma ; vma = vma->vm_next) {
-      if (vma->memdom_id == memdom_id && (vma->vm_flags & VM_MEMDOM)) {
+    for (vm_memdom = mm->protected_vmas; vm_memdom ; vm_memdom = vm_memdom->next) {
+      if (vm_memdom->vma->memdom_id == memdom_id) {
+	vma = vm_memdom->vma;
 	error = do_mprotect(tsk, vma->vm_start, vma->vm_end-vma->vm_start,
 			    memdom->pgprot[smv_id]);
 	if (error) {

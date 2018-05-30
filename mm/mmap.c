@@ -53,6 +53,9 @@
 
 #include "internal.h"
 
+/* SLAB cache for memdom_vma structure  */
+static struct kmem_cache *memdom_vma_cachep;
+
 #ifndef arch_mmap_check
 #define arch_mmap_check(addr, len, flags)	(0)
 #endif
@@ -1469,6 +1472,22 @@ static inline int accountable_mapping(struct file *file, vm_flags_t vm_flags)
 	return (vm_flags & (VM_NORESERVE | VM_SHARED | VM_WRITE)) == VM_WRITE;
 }
 
+/** void memdom_vma_init(void)
+ *  Create slab cache for future memdom_vma struct allocation.
+ * This is called in mmap_region the first time a thread allocates memory
+ * in a memdom.
+ */
+static void memdom_vma_init(void){
+   memdom_vma_cachep = kmem_cache_create("memdom_vma",
+				     sizeof(struct memdom_vma), 0,
+				     SLAB_HWCACHE_ALIGN | SLAB_NOTRACK, NULL);
+   if( !memdom_vma_cachep ) {
+     slog(KERN_INFO, "[%s] memdom_vma slabs initialization failed...\n", __func__);
+   } else{
+     slog(KERN_INFO, "[%s] memdom_vma slabs initialized\n", __func__);
+   }
+}
+
 unsigned long mmap_region(struct file *file, unsigned long addr,
 		unsigned long len, vm_flags_t vm_flags, unsigned long pgoff)
 {
@@ -1477,6 +1496,7 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	int error;
 	struct rb_node **rb_link, *rb_parent;
 	unsigned long charged = 0;
+	struct memdom_vma *vm_memdom = NULL;;
 
 	/* Check against address space limit. */
 	if (!may_expand_vm(mm, vm_flags, len >> PAGE_SHIFT)) {
@@ -1548,7 +1568,24 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
         if ( vm_flags & VM_MEMDOM ) {
 	  slog(KERN_INFO, "[%s] vma %p is memdom protected\n", __func__, vma);
             vma->memdom_id = current->mmap_memdom_id;
-            current->mmap_memdom_id = -1; // reset to -1
+            current->mmap_memdom_id = 0; // reset to -1
+
+	    // add this vma to our list
+	    if (!memdom_vma_cachep) {
+	      memdom_vma_init();
+	      if (!memdom_vma_cachep) {
+		error = -ENOMEM;
+		goto free_vma;
+	      }
+	    }
+	    vm_memdom = kmem_cache_zalloc(memdom_vma_cachep, GFP_KERNEL);
+	    if (!vm_memdom) {
+	      error = -ENOMEM;
+	      goto free_vma;
+	    }
+	    vm_memdom->vma = vma;
+	    vm_memdom->next = mm->protected_vmas;
+	    mm->protected_vmas = vm_memdom;
 	}
         else {
             vma->memdom_id = MAIN_THREAD;
@@ -2380,6 +2417,9 @@ static void unmap_region(struct mm_struct *mm,
                          prev ? prev->vm_end : FIRST_USER_ADDRESS,
                          next ? next->vm_start : USER_PGTABLES_CEILING );
                     tlb.smv_id = smv_id;
+		    if (vma->vm_flags & VM_MEMDOM) {
+		      // TODO: remove this vma from the mm->protected_vmas list
+		    }
                     unmap_vmas(&tlb, vma, start, end);
                     /* Only the main thread should touch vma in
                        free_pgtables */
