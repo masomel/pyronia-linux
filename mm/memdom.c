@@ -518,10 +518,6 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
     return prot;
 }
 
-/* Defined in mprotect.c */
-extern int do_mprotect (struct task_struct *tsk, unsigned long start,
-		 size_t len, unsigned long prot);
-
 /* mprotect all vmas belonging to the memdom_id using the
  * memdom's page protection value for the given smv.
 */

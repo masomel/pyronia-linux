@@ -8,7 +8,7 @@
 #include "internal.h"
 
 /* Check whether current fault is a valid smv page fault.
- * Return 1 if it's a valid smv fault, 0 to block access 
+ * Return 1 if it's a valid smv fault, 0 to block access
  */
 int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_code){
     int memdom_id = vma->memdom_id;
@@ -16,9 +16,9 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     int privs = 0;
     int rv = 0;
 
-    /* Skip checking for smv valid fault if 
-     * 1. current task is not using smv 
-     * 2. current task is using smv, but page fault triggered by Pthreads (smv_id == -1) 
+    /* Skip checking for smv valid fault if
+     * 1. current task is not using smv
+     * 2. current task is using smv, but page fault triggered by Pthreads (smv_id == -1)
      */
     if ( !mm->using_smv || (mm->using_smv && current->smv_id == -1) ) {
          return 1;
@@ -34,7 +34,7 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
     privs = memdom_priv_get(memdom_id, smv_id);
 
     printk(KERN_INFO "[%s] error code: %lu\n", __func__, error_code);
-    
+
     /* Protection fault */
     if ( error_code & PF_PROT ) {
     }
@@ -48,7 +48,7 @@ int smv_valid_fault(int smv_id, struct vm_area_struct *vma, unsigned long error_
             rv = 0; // Try to write a unwritable address
         }
     }
-    /* Read fault */ 
+    /* Read fault */
     else {
         if ( privs & MEMDOM_READ ) {
             rv = 1;
@@ -78,40 +78,33 @@ static inline void init_rss_vec(int *rss) {
     memset(rss, 0, sizeof(int) * NR_MM_COUNTERS);
 }
 static inline void add_mm_rss_vec(struct mm_struct *mm, int *rss) {
-	int i;
+        int i;
 
-	if (current->mm == mm)
-		sync_mm_rss(mm);
-	for (i = 0; i < NR_MM_COUNTERS; i++)
-		if (rss[i])
-			add_mm_counter(mm, i, rss[i]);
+        if (current->mm == mm)
+                sync_mm_rss(mm);
+        for (i = 0; i < NR_MM_COUNTERS; i++)
+                if (rss[i])
+                        add_mm_counter(mm, i, rss[i]);
 }
 
-/* Copy pte of a fault address from src_smv to dst_smv 
+/* Copy pte of a fault address from src_smv to dst_smv
  * Return 0 on success, -1 otherwise.
  */
-int copy_pgtable_smv(int dst_smv, int src_smv, 
+int copy_pgtable_smv(int dst_smv, int src_smv,
                      unsigned long address, unsigned int flags,
                      struct vm_area_struct *vma){
-    
+
     struct mm_struct *mm = current->mm;
     pgd_t *src_pgd, *dst_pgd;
     pud_t *src_pud, *dst_pud;
     pmd_t *src_pmd, *dst_pmd;
-    pte_t *src_pte, *dst_pte;   
+    pte_t *src_pte, *dst_pte;
     spinlock_t *src_ptl, *dst_ptl;
     struct page *page;
     int rv;
     int rss[NR_MM_COUNTERS];
-
-    /* If we're handling any kind of write fault, don't copy the
-     * page table from the main thread since we'll just undo the loading of a
-     * a writable page by do_anonymous in the destination smv's page table
-     */
-    /*    if (flags & FAULT_FLAG_WRITE) {
-      printk(KERN_INFO "[%s] smv %d just got a new writable page from do_anonymous_page. Skip\n", __func__, dst_smv);
-      return 0;
-      }*/
+    unsigned long prot;
+    pte_t ptent;
 
     /* Don't copy page table to the main thread */
     if ( dst_smv == MAIN_THREAD ) {
@@ -133,7 +126,7 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     down_write(&mm->smv_metadataMutex);
 
     /* Source smv:
-     * Page walk to obtain the source pte 
+     * Page walk to obtain the source pte
      * We should hit each level as __handle_mm_fault has already handled the fault
      */
     src_pgd = pgd_offset_smv(mm, address, src_smv);
@@ -143,8 +136,8 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     src_ptl = pte_lockptr(mm, src_pmd);
     spin_lock(src_ptl);
 
-    /* Destination smv: 
-     * Page walk to obtain the destination pte. 
+    /* Destination smv:
+     * Page walk to obtain the destination pte.
      * Allocate new entry as needed */
     dst_pgd = pgd_offset_smv(mm, address, dst_smv);
     dst_pud = pud_alloc(mm, dst_pgd, address);
@@ -160,7 +153,7 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
         goto unlock_src;
     }
     if ( unlikely(pmd_none(*dst_pmd)) &&
-         unlikely(__pte_alloc(mm, dst_pmd, address))) {    
+         unlikely(__pte_alloc(mm, dst_pmd, address))) {
          rv = VM_FAULT_OOM;
          printk(KERN_ERR "[%s] Error: pmd_none(*dst_pud) && __pte_alloc() failed, address 0x%16lx\n", __func__, address);
          goto unlock_src;
@@ -169,44 +162,61 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     dst_ptl = pte_lockptr(mm, dst_pmd);
     spin_lock_nested(dst_ptl, SINGLE_DEPTH_NESTING);
 
-    /* Skip copying pte if two ptes refer to the same page and 
+    /* Skip copying pte if two ptes refer to the same page and
      * specify the same access privileges */
     if ( !pte_same(*src_pte, *dst_pte) ) {
         /*
-	 * If it's a COW mapping, write protect it both
-	 * in the parent and the child
-	 
-	if (is_cow_mapping(vma->vm_flags)) {
-		ptep_set_wrprotect(mm, address, src_pte);
-		*dst_pte = pte_wrprotect(*dst_pte);
-		printk(KERN_ERR "[%s] Write protected mapping for addr 0x%16lx in dest smv %d\n", __func__, address, dst_smv);
-		}*/
-      
-        page = vm_normal_page(vma, address, *src_pte);       
+         * If it's a COW mapping, write protect it both
+         * in the parent and the child
+         */
+        if (is_cow_mapping(vma->vm_flags)) {
+                ptep_set_wrprotect(mm, address, src_pte);
+                *dst_pte = pte_wrprotect(*dst_pte);
+                printk(KERN_ERR "[%s] Write protected mapping for addr 0x%16lx in dest smv %d\n", __func__, address, dst_smv);
+        }
+
+        page = vm_normal_page(vma, address, *src_pte);
         /* Update data page statistics */
         if ( page ) {
             init_rss_vec(rss);
             get_page(page);
             page_dup_rmap(page, false);
-	    rss[mm_counter(page)]++;
-    	    add_mm_rss_vec(mm, rss);
+            rss[mm_counter(page)]++;
+            add_mm_rss_vec(mm, rss);
         }
+
         slog(KERN_INFO, "[%s] src_pte 0x%16lx(smv %d) != dst_pte 0x%16lx (smv %d) for addr 0x%16lx\n", __func__, pte_val(*src_pte), src_smv, pte_val(*dst_pte), dst_smv, address);
     } else{
         slog(KERN_INFO, "[%s] src_pte (smv %d) == dst_pte (smv %d) for addr 0x%16lx\n", __func__, src_smv, dst_smv, address);
     }
 
-    /* Set the actual value to be the same as the source 
-     * pgtables for destination  */   
+    /* Set the actual value to be the same as the source
+     * pgtables for destination  */
     set_pte_at(mm, address, dst_pte, *src_pte);
 
-    printk(KERN_INFO "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n", 
+    if (vma->memdom_id > MAIN_THREAD) {
+        prot = memdom_get_pgprot(vma->memdom_id, dst_smv);
+
+        const bool rier = (current->personality & READ_IMPLIES_EXEC) &&
+            (prot & PROT_READ);
+        /* Does the application expect PROT_READ to imply PROT_EXEC */
+        if (rier && (vma->vm_flags & VM_MAYEXEC))
+            prot |= PROT_EXEC;
+
+        slog(KERN_INFO, "[%s] for smv %d in memdom %d\n", __func__, dst_smv, vma->memdom_id);
+
+        ptent = ptep_modify_prot_start(mm, address, dst_pte);
+        ptent = pte_modify(ptent, prot);
+        ptep_modify_prot_commit(mm, address, dst_pte, ptent);
+    }
+
+    printk(KERN_INFO "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",
                 __func__, src_smv, pgd_val(*src_pgd), pud_val(*src_pud), pmd_val(*src_pmd), pte_val(*src_pte));
-    printk(KERN_INFO "[%s] dst smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n", 
+    printk(KERN_INFO "[%s] dst smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",
                 __func__, dst_smv, pgd_val(*dst_pgd), pud_val(*dst_pud), pmd_val(*dst_pmd), pte_val(*dst_pte));
-  
+
     spin_unlock(dst_ptl);
-    pte_unmap(dst_pte);    
+    pte_unmap(dst_pte);
 
     /* By the time we get here, the page tables are set up correctly */
     rv = 0;
@@ -218,7 +228,7 @@ unlock_src:
     if ( rv != 0 ) {
         printk(KERN_ERR "[%s] Error: !dst_pud, address 0x%16lx\n", __func__, address);
     } else{
-        slog(KERN_INFO, "[%s] smv %d copied pte from MAIN_THREAD. addr 0x%16lx, *src_pte 0x%16lx, *dst_pte 0x%16lx\n", 
+        slog(KERN_INFO, "[%s] smv %d copied pte from MAIN_THREAD. addr 0x%16lx, *src_pte 0x%16lx, *dst_pte 0x%16lx\n",
                __func__, dst_smv, address, pte_val(*src_pte), pte_val(*dst_pte));
     }
     up_write(&mm->smv_metadataMutex);

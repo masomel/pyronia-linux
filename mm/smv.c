@@ -470,7 +470,7 @@ void switch_smv(struct task_struct *next_tsk,
     }
 
     slog(KERN_INFO, "[%s] switching to smv %d\n", __func__, next_tsk->smv_id);
-    smv_mprotect_all_vmas(next_tsk, next_mm, next_tsk->smv_id);
+    //smv_mprotect_all_vmas(next_tsk, next_mm, next_tsk->smv_id);
 }
 
 /* See implementation in memory.c */
