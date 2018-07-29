@@ -36,16 +36,16 @@ static inline unsigned long memdom_privs_to_pgprot(int privs) {
     unsigned long vm_prot = 0;
 
     if( privs & MEMDOM_READ ) {
-        vm_prot |= PROT_READ;
+        vm_prot |= VM_READ;
     }
     if( privs & MEMDOM_WRITE ) {
-        vm_prot |= PROT_WRITE;
+        vm_prot |= VM_WRITE;
     }
     if( privs & MEMDOM_EXECUTE ) {
       //vm_prot |= PROT_EXEC;
     }
     if( privs & MEMDOM_ALLOCATE ) {
-        vm_prot |= PROT_WRITE;
+        vm_prot |= VM_WRITE;
     }
 
     return vm_prot;
@@ -523,7 +523,7 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
 */
 int memdom_mprotect_all_vmas(struct task_struct *tsk, struct mm_struct *mm,
 			     int memdom_id, int smv_id) {
-    struct memdom_vma *vm_memdom = NULL;
+  /*   struct memdom_vma *vm_memdom = NULL;
     int error = 0;
     struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
@@ -562,4 +562,6 @@ int memdom_mprotect_all_vmas(struct task_struct *tsk, struct mm_struct *mm,
     //mutex_unlock(&memdom->memdom_mutex);
     //spin_unlock(&mm->smv_metadataMutex);
     return error;
+  */
+  return 0;
 }

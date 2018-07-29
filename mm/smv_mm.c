@@ -4,6 +4,8 @@
 #include <linux/mm_types.h>
 #include <linux/rmap.h>
 #include <linux/smv.h>
+#include <linux/mman.h>
+#include <linux/personality.h>
 
 #include "internal.h"
 
@@ -105,6 +107,7 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     int rss[NR_MM_COUNTERS];
     unsigned long prot;
     pte_t ptent;
+    bool rier;
 
     /* Don't copy page table to the main thread */
     if ( dst_smv == MAIN_THREAD ) {
@@ -165,16 +168,7 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     /* Skip copying pte if two ptes refer to the same page and
      * specify the same access privileges */
     if ( !pte_same(*src_pte, *dst_pte) ) {
-        /*
-         * If it's a COW mapping, write protect it both
-         * in the parent and the child
-         */
-        if (is_cow_mapping(vma->vm_flags)) {
-                ptep_set_wrprotect(mm, address, src_pte);
-                *dst_pte = pte_wrprotect(*dst_pte);
-                printk(KERN_ERR "[%s] Write protected mapping for addr 0x%16lx in dest smv %d\n", __func__, address, dst_smv);
-        }
-
+      
         page = vm_normal_page(vma, address, *src_pte);
         /* Update data page statistics */
         if ( page ) {
@@ -197,17 +191,16 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     if (vma->memdom_id > MAIN_THREAD) {
         prot = memdom_get_pgprot(vma->memdom_id, dst_smv);
 
-        const bool rier = (current->personality & READ_IMPLIES_EXEC) &&
-            (prot & PROT_READ);
+        rier = (current->personality & READ_IMPLIES_EXEC) &&
+            (prot & VM_READ);
         /* Does the application expect PROT_READ to imply PROT_EXEC */
         if (rier && (vma->vm_flags & VM_MAYEXEC))
-            prot |= PROT_EXEC;
-
-        slog(KERN_INFO, "[%s] for smv %d in memdom %d\n", __func__, dst_smv, vma->memdom_id);
+            prot |= VM_EXEC;
 
         ptent = ptep_modify_prot_start(mm, address, dst_pte);
-        ptent = pte_modify(ptent, prot);
+        ptent = pte_modify(ptent, vm_get_page_prot(prot));
         ptep_modify_prot_commit(mm, address, dst_pte, ptent);
+	slog(KERN_INFO, "[%s] Set protection bits for smv %d in memdom %d for pte_val:0x%16lx\n", __func__, dst_smv, vma->memdom_id, pte_val(*dst_pte));
     }
 
     printk(KERN_INFO "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",
