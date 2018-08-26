@@ -331,7 +331,11 @@ static void validate_mm(struct mm_struct *mm)
 	int bug = 0;
 	int i = 0;
 	unsigned long highest_address = 0;
-	struct vm_area_struct *vma = mm->mmap;
+	struct vm_area_struct *vma;
+        if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
 
 	while (vma) {
 		struct anon_vma *anon_vma = vma->anon_vma;
@@ -450,7 +454,10 @@ static int find_vma_links(struct mm_struct *mm, unsigned long addr,
 {
 	struct rb_node **__rb_link, *__rb_parent, *rb_prev;
 
-	__rb_link = &mm->mm_rb.rb_node;
+        if (mm->using_smv & current->smv_id >= MAIN_THREAD)
+            __rb_link = &mm->mm_rb_smv[current->smv_id].rb_node;
+        else
+            __rb_link = &mm->mm_rb.rb_node;
 	rb_prev = __rb_parent = NULL;
 
 	while (*__rb_link) {
@@ -527,7 +534,10 @@ void __vma_link_rb(struct mm_struct *mm, struct vm_area_struct *vma,
 	rb_link_node(&vma->vm_rb, rb_parent, rb_link);
 	vma->rb_subtree_gap = 0;
 	vma_gap_update(vma);
-	vma_rb_insert(vma, &mm->mm_rb);
+        if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+            vma_rb_insert(vma, &mm->mm_rb_smv[current->smv_id]);
+        else
+            vma_rb_insert(vma, &mm->mm_rb);
 }
 
 static void __vma_link_file(struct vm_area_struct *vma)
@@ -960,7 +970,9 @@ struct vm_area_struct *vma_merge(struct mm_struct *mm,
 
 	if (prev)
 		next = prev->vm_next;
-	else
+	else if (mm->using_smv && current->smv_id > MAIN_THRTEAD)
+                next = mm->mmap_smv[current->smv_id];
+        else
 		next = mm->mmap;
 	area = next;
 	if (next && next->vm_end == end)		/* cases 6, 7, 8 */
@@ -1523,6 +1535,7 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
 	vma->vm_flags = vm_flags;
+        if (mm->using_smv
 	vma->vm_page_prot = vm_get_page_prot(vm_flags);
 	vma->vm_pgoff = pgoff;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
@@ -1991,7 +2004,12 @@ struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr)
 	if (likely(vma))
 		return vma;
 
-	rb_node = mm->mm_rb.rb_node;
+        if (mm->using_smv && current->smv_id != -1) {
+            rb_node = mm->mm_rb_smv[current->smv_id].rb_node;
+        }
+        else {
+            rb_node = mm->mm_rb.rb_node;
+        }
 
 	while (rb_node) {
 		struct vm_area_struct *tmp;
@@ -2027,7 +2045,14 @@ find_vma_prev(struct mm_struct *mm, unsigned long addr,
 	if (vma) {
 		*pprev = vma->vm_prev;
 	} else {
-		struct rb_node *rb_node = mm->mm_rb.rb_node;
+            	struct rb_node *rb_node;
+                if (mm->using_smv && current->smv_id != -1) {
+                    rb_node = mm->mm_rb_smv[current->smv_id].rb_node;
+                }
+                else {
+                    rb_node = mm->mm_rb.rb_node;
+                }
+
 		*pprev = NULL;
 		while (rb_node) {
 			*pprev = rb_entry(rb_node, struct vm_area_struct, vm_rb);
@@ -2398,8 +2423,14 @@ detach_vmas_to_be_unmapped(struct mm_struct *mm, struct vm_area_struct *vma,
 {
 	struct vm_area_struct **insertion_point;
 	struct vm_area_struct *tail_vma = NULL;
+        struct vm_area_struct *vma1;
 
-	insertion_point = (prev ? &prev->vm_next : &mm->mmap);
+        if (mm->using_smv && current->smv_id >= 0)
+            vma1 = mm->mmap_smv[current->smv_id];
+        else
+            vma1 = mm->mmap;
+
+	insertion_point = (prev ? &prev->vm_next : &vma1);
 	vma->vm_prev = NULL;
 	do {
 		vma_rb_erase(vma, &mm->mm_rb);
@@ -2509,7 +2540,7 @@ int split_vma(struct mm_struct *mm, struct vm_area_struct *vma,
 int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
 {
 	unsigned long end;
-	struct vm_area_struct *vma, *prev, *last;
+	struct vm_area_struct *vma, *vma1, *prev, *last;
 
 	if ((offset_in_page(start)) || start > TASK_SIZE || len > TASK_SIZE-start)
 		return -EINVAL;
@@ -2561,7 +2592,12 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
 		if (error)
 			return error;
 	}
-	vma = prev ? prev->vm_next : mm->mmap;
+        if (mm->using_smv && current->smv_id >= 0)
+            vma1 = mm->mmap_smv[current->smv_id];
+        else
+            vma1 = mm->mmap;
+
+	vma = prev ? prev->vm_next : vma1;
 
 	/*
 	 * unlock any mlock()ed ranges before detaching vmas
@@ -2854,7 +2890,10 @@ void exit_mmap(struct mm_struct *mm)
 	mmu_notifier_release(mm);
 
 	if (mm->locked_vm) {
-		vma = mm->mmap;
+                if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+                    vma = mm->mmap_smv[current->smv_id];
+                else
+                    vma = mm->mmap;
 		while (vma) {
 			if (vma->vm_flags & VM_LOCKED)
 				munlock_vma_pages_all(vma);
@@ -2864,7 +2903,10 @@ void exit_mmap(struct mm_struct *mm)
 
 	arch_exit_mmap(mm);
 
-	vma = mm->mmap;
+	if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
 	if (!vma)	/* Can happen if dup_mmap() received an OOM */
 		return;
 
@@ -3280,7 +3322,11 @@ int mm_take_all_locks(struct mm_struct *mm)
 
 	mutex_lock(&mm_all_locks_mutex);
 
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+        if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
+	for ( ; vma; vma = vma->vm_next) {
 		if (signal_pending(current))
 			goto out_unlock;
 		if (vma->vm_file && vma->vm_file->f_mapping &&
@@ -3288,7 +3334,11 @@ int mm_take_all_locks(struct mm_struct *mm)
 			vm_lock_mapping(mm, vma->vm_file->f_mapping);
 	}
 
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+        if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
+	for ( ; vma; vma = vma->vm_next) {
 		if (signal_pending(current))
 			goto out_unlock;
 		if (vma->vm_file && vma->vm_file->f_mapping &&
@@ -3296,7 +3346,11 @@ int mm_take_all_locks(struct mm_struct *mm)
 			vm_lock_mapping(mm, vma->vm_file->f_mapping);
 	}
 
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+        if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
+	for ( ; vma; vma = vma->vm_next) {
 		if (signal_pending(current))
 			goto out_unlock;
 		if (vma->anon_vma)
@@ -3359,7 +3413,11 @@ void mm_drop_all_locks(struct mm_struct *mm)
 	BUG_ON(down_read_trylock(&mm->mmap_sem));
 	BUG_ON(!mutex_is_locked(&mm_all_locks_mutex));
 
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+        if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
+	for ( ; vma; vma = vma->vm_next) {
 		if (vma->anon_vma)
 			list_for_each_entry(avc, &vma->anon_vma_chain, same_vma)
 				vm_unlock_anon_vma(avc->anon_vma);

@@ -1684,7 +1684,12 @@ static int prctl_set_mm_exe_file(struct mm_struct *mm, unsigned int fd)
 		struct vm_area_struct *vma;
 
 		down_read(&mm->mmap_sem);
-		for (vma = mm->mmap; vma; vma = vma->vm_next) {
+                if (mm->using_smv && current->smv_id >= 0)
+                    vma = mm->mmap_smv[current->smv_id];
+                else
+                    vma = mm->mmap;
+
+		for ( ; vma; vma = vma->vm_next) {
 			if (!vma->vm_file)
 				continue;
 			if (path_equal(&vma->vm_file->f_path,

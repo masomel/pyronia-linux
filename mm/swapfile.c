@@ -1304,7 +1304,11 @@ static int unuse_mm(struct mm_struct *mm,
 		down_read(&mm->mmap_sem);
 		lock_page(page);
 	}
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+        if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
+	for ( ; vma; vma = vma->vm_next) {
 		if (vma->anon_vma && (ret = unuse_vma(vma, entry, page)))
 			break;
 	}

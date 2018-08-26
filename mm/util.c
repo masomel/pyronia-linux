@@ -217,7 +217,10 @@ void __vma_link_list(struct mm_struct *mm, struct vm_area_struct *vma,
 		next = prev->vm_next;
 		prev->vm_next = vma;
 	} else {
-		mm->mmap = vma;
+                if (mm->using_smv && current->smv_id >= 0)
+                    mm->mmap_smv[current->smv_id] = vma;
+                else
+                    mm->mmap = vma;
 		if (rb_parent)
 			next = rb_entry(rb_parent,
 					struct vm_area_struct, vm_rb);

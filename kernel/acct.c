@@ -537,7 +537,10 @@ void acct_collect(long exitcode, int group_dead)
 		struct vm_area_struct *vma;
 
 		down_read(&current->mm->mmap_sem);
-		vma = current->mm->mmap;
+                if (current->mm->using_smv && current->smv_id >= 0)
+                    vma = current->mm->mmap_smv[current->smv_id];
+                else
+                    vma = current->mm->mmap;
 		while (vma) {
 			vsize += vma->vm_end - vma->vm_start;
 			vma = vma->vm_next;

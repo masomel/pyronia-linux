@@ -771,7 +771,12 @@ static int unmerge_and_remove_all_rmap_items(void)
 			mm_slot != &ksm_mm_head; mm_slot = ksm_scan.mm_slot) {
 		mm = mm_slot->mm;
 		down_read(&mm->mmap_sem);
-		for (vma = mm->mmap; vma; vma = vma->vm_next) {
+                if (mm->using_smv && current->smv_id >= 0)
+                    vma = mm->mmap_smv[current->smv_id];
+                else
+                    vma = mm->mmap;
+
+		for ( ; vma; vma = vma->vm_next) {
 			if (ksm_test_exit(mm))
 				break;
 			if (!(vma->vm_flags & VM_MERGEABLE) || !vma->anon_vma)

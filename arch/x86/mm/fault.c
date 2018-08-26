@@ -1405,7 +1405,7 @@ good_area:
             printk(KERN_ERR "[%s] prot: %d, write: %d, user: %d, rsvd: %d, instr_code: %d\n",
                    __func__, prot_code, write_code, user_code, rsvd_code, instr_code);
 
-            walk = mm->mmap;
+            walk = vma;
             while (walk) {
                 printk(KERN_ERR "[%s] vma->vm_start: 0x%16lx to vma->vm_end: 0x%16lx, vma->memdom_id: %d\n",
                        __func__, walk->vm_start, walk->vm_end, walk->memdom_id);

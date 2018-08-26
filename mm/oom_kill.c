@@ -507,7 +507,11 @@ static bool __oom_reap_task(struct task_struct *tsk)
 	}
 
 	tlb_gather_mmu(&tlb, mm, 0, -1);
-	for (vma = mm->mmap ; vma; vma = vma->vm_next) {
+        if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
+	for ( ; vma; vma = vma->vm_next) {
 		if (is_vm_hugetlb_page(vma))
 			continue;
 

@@ -719,7 +719,12 @@ static int apply_mlockall_flags(int flags)
 			to_add |= VM_LOCKONFAULT;
 	}
 
-	for (vma = current->mm->mmap; vma ; vma = prev->vm_next) {
+        if (mm->using_smv && current->smv_id >= 0)
+            vma = current->mm->mmap_smv[current->smv_id];
+        else
+            vma = current->mm->mmap;
+
+	for ( ; vma ; vma = prev->vm_next) {
 		vm_flags_t newflags;
 
 		newflags = vma->vm_flags & VM_LOCKED_CLEAR_MASK;

@@ -2346,7 +2346,10 @@ void task_numa_work(struct callback_head *work)
 	if (!vma) {
 		reset_ptenuma_scan(p);
 		start = 0;
-		vma = mm->mmap;
+                if (mm->using_smv && p->smv_id >= 0)
+                    vma = mm->mmap_smv[p->smv_id];
+                else
+                    vma = mm->mmap;
 	}
 	for (; vma; vma = vma->vm_next) {
 		if (!vma_migratable(vma) || !vma_policy_mof(vma) ||

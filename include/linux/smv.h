@@ -36,6 +36,8 @@
 #define slog(level, fmt, args...) do{ }while(0)
 #endif
 
+#define MAIN_THREAD 0 /* Main thread is always using the first index in the metadata array: 0 */
+
 /// Smvs struct metadata ///
 struct smv_struct {
     int smv_id;

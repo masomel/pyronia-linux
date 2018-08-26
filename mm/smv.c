@@ -431,7 +431,7 @@ void smv_free_pgtables(struct mmu_gather *tlb, struct vm_area_struct *vma,
 /* Free page tables for a smv 
  * Caller must hold the mm semaphore */
 void smv_free_mmap(struct mm_struct *mm, int smv_id){
-    struct vm_area_struct *vma = mm->mmap;
+    struct vm_area_struct *vma = mm->mmap_smv[smv_id];
 	struct mmu_gather tlb;
 
     /* Can happen if dup_mmap() received an OOM */

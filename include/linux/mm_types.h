@@ -421,6 +421,9 @@ struct mm_struct {
 
     struct vm_area_struct *mmap;		/* list of VMAs */
     struct rb_root mm_rb;
+    // list of VMAs used by smv threads
+    struct vm_area_struct *mmap_smv[SMV_ARRAY_SIZE];
+    struct rb_root mm_rb_smv[SMV_ARRAY_SIZE];
     u32 vmacache_seqnum;                   /* per-thread vmacache */
 #ifdef CONFIG_MMU
     unsigned long (*get_unmapped_area) (struct file *filp,

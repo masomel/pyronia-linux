@@ -965,7 +965,12 @@ static int unapply_uprobe(struct uprobe *uprobe, struct mm_struct *mm)
 	int err = 0;
 
 	down_read(&mm->mmap_sem);
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+        if (mm->using_smv && current->smv_id >= 0)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
+
+	for ( ; vma; vma = vma->vm_next) {
 		unsigned long vaddr;
 		loff_t offset;
 
@@ -1675,7 +1680,12 @@ static void mmf_recalc_uprobes(struct mm_struct *mm)
 {
 	struct vm_area_struct *vma;
 
-	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+        if (mm->using_smv && current->smv_id >= 0)
+            vma = mm->mmap_smv[current->smv_id];
+        else
+            vma = mm->mmap;
+
+	for ( ; vma; vma = vma->vm_next) {
 		if (!valid_vma(vma, false))
 			continue;
 		/*
