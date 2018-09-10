@@ -375,10 +375,12 @@ int memdom_claim_all_vmas(int memdom_id){
     }
     
    	down_write(&mm->mmap_sem);
-        
-  	for (vma = mm->mmap_smv[MAIN_THREAD]; vma; vma = vma->vm_next) {
-        vma->memdom_id = MAIN_THREAD;
-        vma_count++;
+
+	mm->mmap_smv[MAIN_THREAD] = mm->mmap;
+	mm->mm_rb_smv[MAIN_THREAD] = mm->mm_rb;
+  	for (vma = mm->mmap; vma; vma = vma->vm_next) {
+	  vma->memdom_id = MAIN_THREAD;
+	  vma_count++;
     }
    	up_write(&mm->mmap_sem);
 

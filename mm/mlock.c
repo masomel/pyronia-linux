@@ -719,7 +719,7 @@ static int apply_mlockall_flags(int flags)
 			to_add |= VM_LOCKONFAULT;
 	}
 
-        if (mm->using_smv && current->smv_id >= 0)
+        if (current->mm->using_smv && current->smv_id >= 0)
             vma = current->mm->mmap_smv[current->smv_id];
         else
             vma = current->mm->mmap;

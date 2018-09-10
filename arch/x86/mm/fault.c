@@ -807,7 +807,11 @@ static inline void
 show_signal_msg(struct pt_regs *regs, unsigned long error_code,
                 unsigned long address, struct task_struct *tsk)
 {
-    struct vm_area_struct *walk = tsk->mm->mmap;
+    struct vm_area_struct *walk;
+    if (tsk->mm->using_smv && tsk->smv_id >= 0)
+        walk = tsk->mm->mmap_smv[tsk->smv_id];
+    else
+        walk = tsk->mm->mmap;
 
     if (!unhandled_signal(tsk, SIGSEGV))
         return;

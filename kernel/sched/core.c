@@ -3227,7 +3227,7 @@ static inline void schedule_debug(struct task_struct *prev)
 {
 #ifdef CONFIG_SCHED_STACK_END_CHECK
 	if (task_stack_end_corrupted(prev))
-		panic("corrupted stack end detected inside scheduler\n");
+	  panic("corrupted stack end detected inside scheduler; smv %d\n", prev->smv_id);
 #endif
 
 	if (unlikely(in_atomic_preempt_off())) {

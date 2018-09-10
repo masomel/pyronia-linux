@@ -44,7 +44,7 @@
 #include <linux/userfaultfd_k.h>
 #include <linux/moduleparam.h>
 #include <linux/pkeys.h>
-#include <linux/smv_mm.h>
+#include <linux/smv.h>
 
 #include <asm/uaccess.h>
 #include <asm/cacheflush.h>
@@ -267,11 +267,16 @@ static long vma_compute_subtree_gap(struct vm_area_struct *vma)
 #ifdef CONFIG_DEBUG_VM_RB
 static int browse_rb(struct mm_struct *mm)
 {
-	struct rb_root *root = &mm->mm_rb;
+        struct rb_root *root;
 	int i = 0, j, bug = 0;
 	struct rb_node *nd, *pn = NULL;
 	unsigned long prev = 0, pend = 0;
 
+	if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+	  root = &mm->mm_rb_smv[current->smv_id];
+	else
+	  root = &mm->mm_rb;
+	
 	for (nd = rb_first(root); nd; nd = rb_next(nd)) {
 		struct vm_area_struct *vma;
 		vma = rb_entry(nd, struct vm_area_struct, vm_rb);
@@ -454,7 +459,7 @@ static int find_vma_links(struct mm_struct *mm, unsigned long addr,
 {
 	struct rb_node **__rb_link, *__rb_parent, *rb_prev;
 
-        if (mm->using_smv & current->smv_id >= MAIN_THREAD)
+        if (mm->using_smv && current->smv_id >= MAIN_THREAD)
             __rb_link = &mm->mm_rb_smv[current->smv_id].rb_node;
         else
             __rb_link = &mm->mm_rb.rb_node;
@@ -611,7 +616,10 @@ __vma_unlink(struct mm_struct *mm, struct vm_area_struct *vma,
 {
 	struct vm_area_struct *next;
 
-	vma_rb_erase(vma, &mm->mm_rb);
+	if (mm->using_smv && current->smv_id >= MAIN_THREAD)
+	  vma_rb_erase(vma, &mm->mm_rb_smv[current->smv_id]);
+	else
+	  vma_rb_erase(vma, &mm->mm_rb);
 	prev->vm_next = next = vma->vm_next;
 	if (next)
 		next->vm_prev = prev;
@@ -970,7 +978,7 @@ struct vm_area_struct *vma_merge(struct mm_struct *mm,
 
 	if (prev)
 		next = prev->vm_next;
-	else if (mm->using_smv && current->smv_id > MAIN_THRTEAD)
+	else if (mm->using_smv && current->smv_id >= MAIN_THREAD)
                 next = mm->mmap_smv[current->smv_id];
         else
 		next = mm->mmap;
@@ -1535,7 +1543,6 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	vma->vm_start = addr;
 	vma->vm_end = addr + len;
 	vma->vm_flags = vm_flags;
-        if (mm->using_smv
 	vma->vm_page_prot = vm_get_page_prot(vm_flags);
 	vma->vm_pgoff = pgoff;
 	INIT_LIST_HEAD(&vma->anon_vma_chain);
@@ -1679,9 +1686,16 @@ unsigned long unmapped_area(struct vm_unmapped_area_info *info)
 	low_limit = info->low_limit + length;
 
 	/* Check if rbtree root looks promising */
-	if (RB_EMPTY_ROOT(&mm->mm_rb))
-		goto check_highest;
-	vma = rb_entry(mm->mm_rb.rb_node, struct vm_area_struct, vm_rb);
+	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
+	  if (RB_EMPTY_ROOT(&mm->mm_rb_smv[current->smv_id]))
+	    goto check_highest;
+	  vma = rb_entry(mm->mm_rb_smv[current->smv_id].rb_node, struct vm_area_struct, vm_rb);
+	}
+	else {
+	  if (RB_EMPTY_ROOT(&mm->mm_rb))
+	    goto check_highest;
+	  vma = rb_entry(mm->mm_rb.rb_node, struct vm_area_struct, vm_rb);
+	}
 	if (vma->rb_subtree_gap < length)
 		goto check_highest;
 
@@ -1782,9 +1796,16 @@ unsigned long unmapped_area_topdown(struct vm_unmapped_area_info *info)
 		goto found_highest;
 
 	/* Check if rbtree root looks promising */
-	if (RB_EMPTY_ROOT(&mm->mm_rb))
-		return -ENOMEM;
-	vma = rb_entry(mm->mm_rb.rb_node, struct vm_area_struct, vm_rb);
+	if (mm->using_smv && current->smv_id >= MAIN_THREAD) {
+	  if (RB_EMPTY_ROOT(&mm->mm_rb_smv[current->smv_id]))
+	    return -ENOMEM;
+	  vma = rb_entry(mm->mm_rb_smv[current->smv_id].rb_node, struct vm_area_struct, vm_rb);
+	}
+	else {
+	  if (RB_EMPTY_ROOT(&mm->mm_rb))
+	    return -ENOMEM;
+	  vma = rb_entry(mm->mm_rb.rb_node, struct vm_area_struct, vm_rb);
+	}
 	if (vma->rb_subtree_gap < length)
 		return -ENOMEM;
 
@@ -2367,7 +2388,7 @@ static void unmap_region(struct mm_struct *mm,
 		struct vm_area_struct *vma, struct vm_area_struct *prev,
 		unsigned long start, unsigned long end)
 {
-	struct vm_area_struct *next = prev ? prev->vm_next : mm->mmap;
+        struct vm_area_struct *next = prev ? prev->vm_next : mm->mmap;
 	struct mmu_gather tlb;
 
 	lru_add_drain();
@@ -2381,6 +2402,7 @@ static void unmap_region(struct mm_struct *mm,
                 smv_id = find_next_bit(mm->smv_bitmapInUse,
                                        SMV_ARRAY_SIZE, (smv_id + 1) );
                 if (smv_id != SMV_ARRAY_SIZE) {
+		    next = mm->mmap_smv[smv_id];
                     slog(KERN_INFO, "[%s] smv %d [0x%16lx to 0x%16lx]\n",
                          __func__, smv_id,
                          prev ? prev->vm_end : FIRST_USER_ADDRESS,
@@ -2433,7 +2455,7 @@ detach_vmas_to_be_unmapped(struct mm_struct *mm, struct vm_area_struct *vma,
 	insertion_point = (prev ? &prev->vm_next : &vma1);
 	vma->vm_prev = NULL;
 	do {
-		vma_rb_erase(vma, &mm->mm_rb);
+	        vma_rb_erase(vma, (mm->using_smv && current->smv_id >= 0 ? &mm->mm_rb_smv[current->smv_id] : &mm->mm_rb));
 		mm->map_count--;
 		tail_vma = vma;
 		vma = vma->vm_next;
@@ -2875,12 +2897,44 @@ int vm_brk(unsigned long addr, unsigned long len)
 }
 EXPORT_SYMBOL(vm_brk);
 
+static void unlock_vma_pages(struct vm_area_struct *vma) {
+  struct vm_area_struct *vma1 = vma;
+  while (vma1) {
+    if (vma1->vm_flags & VM_LOCKED)
+      munlock_vma_pages_all(vma1);
+    vma1 = vma1->vm_next;
+  }
+}
+
+static unsigned long exit_mmap_internal(struct vm_area_struct *vma, struct mmu_gather tlb) {
+  struct vm_area_struct *vma1 = vma;
+  unsigned long nr_accounted = 0;
+
+  /* update_hiwater_rss(mm) here? but nobody should be looking */
+  /* Use -1 here to ensure all VMAs in the mm are unmapped */
+  unmap_vmas(&tlb, vma1, 0, -1);
+  free_pgtables(&tlb, vma1, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
+  tlb_finish_mmu(&tlb, 0, -1);
+
+  /*
+   * Walk the list again, actually closing and freeing it,
+   * with preemption enabled, without holding any MM locks.
+   */
+  while (vma1) {
+    if (vma1->vm_flags & VM_ACCOUNT)
+      nr_accounted += vma_pages(vma1);
+    vma1 = remove_vma(vma1);
+  }
+  return nr_accounted;
+}
+
 /* Release all mmaps. */
 void exit_mmap(struct mm_struct *mm)
 {
 	struct mmu_gather tlb;
 	struct vm_area_struct *vma;
 	unsigned long nr_accounted = 0;
+	int i = 0;
 
         if (mm->using_smv) {
             slog(KERN_INFO, "[%s] %s in smv %d mm: %p\n", __func__, current->comm, current->smv_id, mm);
@@ -2890,15 +2944,16 @@ void exit_mmap(struct mm_struct *mm)
 	mmu_notifier_release(mm);
 
 	if (mm->locked_vm) {
-                if (mm->using_smv && current->smv_id >= MAIN_THREAD)
-                    vma = mm->mmap_smv[current->smv_id];
-                else
-                    vma = mm->mmap;
-		while (vma) {
-			if (vma->vm_flags & VM_LOCKED)
-				munlock_vma_pages_all(vma);
-			vma = vma->vm_next;
-		}
+	  if (mm->using_smv) {
+	    for (i = 0; i < SMV_ARRAY_SIZE; i++) {
+	      vma = mm->mmap_smv[current->smv_id];
+	      unlock_vma_pages(vma);
+	    }
+	  }
+	  else {
+	    vma = mm->mmap;
+	    unlock_vma_pages(vma);
+	  }
 	}
 
 	arch_exit_mmap(mm);
@@ -2920,6 +2975,16 @@ void exit_mmap(struct mm_struct *mm)
             /* Set smv id in tlb for unmap_vmas and free_pgtables
                to use */
             tlb.smv_id = MAIN_THREAD;
+	}
+
+	if (mm->using_smv) {
+	  for (i = 0; i < SMV_ARRAY_SIZE; i++) {
+	    vma = mm->mmap_smv[i];
+	    nr_accounted = exit_mmap_internal(vma, tlb);
+	    if (i == 0)
+	      vm_unacct_memory(nr_accounted);
+	  }
+	  return;
 	}
 
         /* update_hiwater_rss(mm) here? but nobody should be looking */
@@ -3047,7 +3112,7 @@ struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 			new_vma->vm_ops->open(new_vma);
 		vma_link(mm, new_vma, prev, rb_link, rb_parent);
 		*need_rmap_locks = false;
-                vma->memdom_id = vma->memdom_id; // copy memdom_id
+                new_vma->memdom_id = vma->memdom_id; // copy memdom_id
 	}
 	return new_vma;
 

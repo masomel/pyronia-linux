@@ -603,6 +603,7 @@ static void mm_init_owner(struct mm_struct *mm, struct task_struct *p)
 
 static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 {
+    int i = 0;
     atomic_set(&mm->num_smvs, 0);
     atomic_set(&mm->num_memdoms, 0);
     /* No smv is allocated yet */
@@ -621,6 +622,9 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
     mm->standby_smv_id = -1;
     memset(mm->mmap_smv, 0, SMV_ARRAY_SIZE*sizeof(struct vm_area_struct));
     memset(mm->mm_rb_smv, 0, SMV_ARRAY_SIZE*sizeof(struct rb_root));
+
+    for (i = 0; i < SMV_ARRAY_SIZE; i++)
+      mm->mm_rb_smv[i] = RB_ROOT;
 
 	mm->mmap = NULL;
 	mm->mm_rb = RB_ROOT;
