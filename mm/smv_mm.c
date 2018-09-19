@@ -168,7 +168,7 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     /* Skip copying pte if two ptes refer to the same page and
      * specify the same access privileges */
     if ( !pte_same(*src_pte, *dst_pte) ) {
-      
+
         page = vm_normal_page(vma, address, *src_pte);
         /* Update data page statistics */
         if ( page ) {
@@ -197,10 +197,20 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
         if (rier && (vma->vm_flags & VM_MAYEXEC))
             prot |= VM_EXEC;
 
-        ptent = ptep_modify_prot_start(mm, address, dst_pte);
+        ptent = ptep_modify_prot_start(mm, addr, dst_pte);
         ptent = pte_modify(ptent, vm_get_page_prot(prot));
-        ptep_modify_prot_commit(mm, address, dst_pte, ptent);
-	slog(KERN_INFO, "[%s] Set protection bits for smv %d in memdom %d for pte_val:0x%16lx\n", __func__, dst_smv, vma->memdom_id, pte_val(*dst_pte));
+        if (preserve_write)
+            ptent = pte_mkwrite(ptent);
+
+        /* Avoid taking write faults for known dirty pages */
+        if (vma_wants_writenotify(vma) && pte_dirty(ptent) &&
+            (pte_soft_dirty(ptent) ||
+             !(vma->vm_flags & VM_SOFTDIRTY))) {
+            ptent = pte_mkwrite(ptent);
+        }
+        ptep_modify_prot_commit(mm, addr, dst_pte, ptent);
+
+        slog(KERN_INFO, "[%s] Set protection bits for smv %d in memdom %d for pte_val:0x%16lx\n", __func__, dst_smv, vma->memdom_id, pte_val(*dst_pte));
     }
 
     printk(KERN_INFO "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",

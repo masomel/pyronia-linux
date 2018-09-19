@@ -229,7 +229,7 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
     /* Only main thread can change the privileges to a memory domain. */
     if (current->smv_id != MAIN_THREAD) {
       printk(KERN_ERR "[%s] thread running in smv %d is not allowed to add privileges.\n", __func__, current->smv_id);
-      return -1;	
+      return -1;
     }
 
     /* Set privileges in memdom's bitmap */
