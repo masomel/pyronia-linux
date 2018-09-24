@@ -109,6 +109,9 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     pte_t ptent;
     bool rier;
 
+    // let's preemptively get this protection --> could be outdated?
+    prot = memdom_get_pgprot(vma->memdom_id, dst_smv);
+
     /* Don't copy page table to the main thread */
     if ( dst_smv == MAIN_THREAD ) {
       slog(KERN_INFO, "[%s] smv %d attempts to overwrite main thread's page table. Skip\n", __func__, src_smv);
@@ -189,18 +192,14 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     set_pte_at(mm, address, dst_pte, *src_pte);
 
     if (vma->memdom_id > MAIN_THREAD) {
-        prot = memdom_get_pgprot(vma->memdom_id, dst_smv);
-
         rier = (current->personality & READ_IMPLIES_EXEC) &&
             (prot & VM_READ);
         /* Does the application expect PROT_READ to imply PROT_EXEC */
         if (rier && (vma->vm_flags & VM_MAYEXEC))
             prot |= VM_EXEC;
 
-        ptent = ptep_modify_prot_start(mm, addr, dst_pte);
+        ptent = ptep_modify_prot_start(mm, address, dst_pte);
         ptent = pte_modify(ptent, vm_get_page_prot(prot));
-        if (preserve_write)
-            ptent = pte_mkwrite(ptent);
 
         /* Avoid taking write faults for known dirty pages */
         if (vma_wants_writenotify(vma) && pte_dirty(ptent) &&
@@ -208,7 +207,7 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
              !(vma->vm_flags & VM_SOFTDIRTY))) {
             ptent = pte_mkwrite(ptent);
         }
-        ptep_modify_prot_commit(mm, addr, dst_pte, ptent);
+        ptep_modify_prot_commit(mm, address, dst_pte, ptent);
 
         slog(KERN_INFO, "[%s] Set protection bits for smv %d in memdom %d for pte_val:0x%16lx\n", __func__, dst_smv, vma->memdom_id, pte_val(*dst_pte));
     }

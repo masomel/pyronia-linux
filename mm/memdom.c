@@ -500,8 +500,8 @@ unsigned long memdom_get_pgprot(int memdom_id, int smv_id) {
     }
 
     down_read(&mm->smv_metadataMutex);
-    smv = current->mm->smv_metadata[smv_id];
-    memdom = current->mm->memdom_metadata[memdom_id];
+    smv = mm->smv_metadata[smv_id];
+    memdom = mm->memdom_metadata[memdom_id];
     up_read(&mm->smv_metadataMutex);
 
     if (!memdom || !smv) {
