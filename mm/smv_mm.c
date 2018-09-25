@@ -265,7 +265,7 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
 
     // we only want to change the PTE protection bits of a new page if it's current
     // memdom access is write-only since mprotect clears the write bit
-    if (vma->memdom_id > MAIN_THREAD && prot != VM_WRITE) {
+    if (vma->memdom_id > MAIN_THREAD && !(prot & VM_WRITE)) {
       set_pte_smv_protection(mm, address, vma, dst_smv, prot);
     }
 
