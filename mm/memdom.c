@@ -1,4 +1,5 @@
 #include <linux/smv.h>
+#include <linux/smv_mm.h>
 #include <linux/memdom.h>
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -191,6 +192,20 @@ int memdom_kill(int memdom_id, struct mm_struct *mm){
 }
 EXPORT_SYMBOL(memdom_kill);
 
+static struct vm_area_struct *find_memdom_vma(struct mm_struct *mm,
+					      int memdom_id) {
+  struct vm_area_struct *vma = mm->mmap;
+
+  while(vma) {
+    if (vma->memdom_id == memdom_id)
+      break;
+    vma = vma->vm_next;
+  }
+  if (!vma)
+    slog(KERN_ERR, "[%s] No mapped vmas for memdom %d\n", __func__, memdom_id);
+  return vma;
+}
+
 /* Free all the memdoms in this mm_struct */
 void free_all_memdoms(struct mm_struct *mm){
     int index = 0;
@@ -206,7 +221,8 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
     struct smv_struct *smv;
     struct memdom_struct *memdom;
     struct mm_struct *mm = current->mm;
-
+    struct vm_area_struct *vma;
+    
     if( smv_id > LAST_SMV_INDEX || memdom_id > LAST_MEMDOM_INDEX ) {
         printk(KERN_ERR "[%s] Error, out of bound: smv %d / memdom %d\n", __func__, smv_id, memdom_id);
         return -1;
@@ -253,9 +269,17 @@ int memdom_priv_add(int memdom_id, int smv_id, int privs){
     // update the page protection for the smv
     if (memdom_id > MAIN_THREAD)
       memdom->pgprot[smv_id] = memdom_privs_to_pgprot(memdom_priv_get_internal(memdom, smv_id));
+
+    // change the protection bits for this memdom's PTE
+    if (memdom_id > MAIN_THREAD && (vma = find_memdom_vma(mm, memdom_id))) {
+      set_pte_smv_protection(mm, vma->vm_start, vma,
+			     smv_id, memdom->pgprot[smv_id]);
+    }
+    
     mutex_unlock(&memdom->memdom_mutex);
 
     // TODO: mprotect for MAIN_THREAD memdom, too
+    
     /*if (memdom_id > MAIN_THREAD && smv_id == MAIN_THREAD)
       return memdom_mprotect_all_vmas(current, mm, memdom_id, smv_id);*/
 
@@ -268,7 +292,8 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
     struct smv_struct *smv = NULL;
     struct memdom_struct *memdom = NULL;
     struct mm_struct *mm = current->mm;
-
+    struct vm_area_struct *vma;
+    
     if( smv_id > LAST_SMV_INDEX || memdom_id > LAST_MEMDOM_INDEX ) {
         printk(KERN_ERR "[%s] Error, out of bound: smv %d / memdom %d\n", __func__, smv_id, memdom_id);
         return -1;
@@ -315,14 +340,15 @@ int memdom_priv_del(int memdom_id, int smv_id, int privs){
     // update the page protection for the smv
     if (memdom_id > MAIN_THREAD)
       memdom->pgprot[smv_id] = memdom_privs_to_pgprot(memdom_priv_get_internal(memdom, smv_id));
-    mutex_unlock(&memdom->memdom_mutex);
 
     // TODO: mprotect for MAIN_THREAD memdom, too
-    // only change immediately if the priv changes affect the current thread
-    // (we know the current thread can only be the main thread since others aren't
-    // allowed to get here)
-    /*if (memdom_id > MAIN_THREAD && smv_id == MAIN_THREAD)
-      return memdom_mprotect_all_vmas(current, mm, memdom_id, smv_id);*/
+    // change the protection bits for this memdom's PTE
+    if (memdom_id > MAIN_THREAD && (vma = find_memdom_vma(mm, memdom_id))) {
+      set_pte_smv_protection(mm, vma->vm_start, vma,
+			     smv_id, memdom->pgprot[smv_id]);
+    }
+
+    mutex_unlock(&memdom->memdom_mutex);
 
     return 0;
 }

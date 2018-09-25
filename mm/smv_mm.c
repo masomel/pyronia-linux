@@ -6,6 +6,7 @@
 #include <linux/smv.h>
 #include <linux/mman.h>
 #include <linux/personality.h>
+#include <asm/tlbflush.h>
 
 #include "internal.h"
 
@@ -89,6 +90,72 @@ static inline void add_mm_rss_vec(struct mm_struct *mm, int *rss) {
                         add_mm_counter(mm, i, rss[i]);
 }
 
+static pmd_t *get_pte_smv(struct mm_struct *mm, unsigned long addr,
+			  int smv_id) {
+  pgd_t *pgd;
+  pud_t *pud;
+  pmd_t *pmd = NULL;
+
+  pgd = pgd_offset_smv(mm, addr, smv_id);
+  if (pgd_none(*pgd))
+    goto out;
+
+  pud = pud_offset(pgd, addr);
+  if (pud_none(*pud))
+    goto out;
+  
+  pmd = pmd_offset(pud, addr);
+
+ out:
+  return pmd;
+}
+
+void set_pte_smv_protection(struct mm_struct *mm, unsigned long address,
+			    struct vm_area_struct *vma,
+			    int smv_id, unsigned long prot) {
+  pmd_t *pmd;
+  pte_t *pte;
+  pte_t ptent;
+  bool rier;
+  spinlock_t *ptl;
+
+  pmd = get_pte_smv(mm, address, smv_id);
+  if (!pmd || pmd_none(*pmd))
+    return;
+
+  pte = pte_offset_map(pmd, address);
+  ptl = pte_lockptr(mm, pmd);
+
+  if (pte_none(*pte) || !pte_present(*pte)) {
+    return;
+  }
+    
+  spin_lock(ptl);
+  set_tlb_flush_pending(mm);
+  rier = (current->personality & READ_IMPLIES_EXEC) && (prot & VM_READ);
+  /* Does the application expect PROT_READ to imply PROT_EXEC */
+  if (rier && (vma->vm_flags & VM_MAYEXEC))
+    prot |= VM_EXEC;
+  
+  ptent = ptep_modify_prot_start(mm, address, pte);
+  ptent = pte_modify(ptent, vm_get_page_prot(prot));
+  
+  /* Avoid taking write faults for known dirty pages */
+  if (vma_wants_writenotify(vma) && pte_dirty(ptent) &&
+      (pte_soft_dirty(ptent) ||
+       !(vma->vm_flags & VM_SOFTDIRTY))) {
+    ptent = pte_mkwrite(ptent);
+  }
+  
+  ptep_modify_prot_commit(mm, address, pte, ptent);
+  /* Only flush the TLB if we actually modified any entries: */
+  flush_tlb_range(vma, vma->vm_start, vma->vm_end);
+  clear_tlb_flush_pending(mm);
+  spin_unlock(ptl);
+  
+  slog(KERN_INFO, "[%s] Set protection bits for smv %d in memdom %d for pte_val:0x%16lx\n", __func__, smv_id, vma->memdom_id, pte_val(*pte));
+}
+
 /* Copy pte of a fault address from src_smv to dst_smv
  * Return 0 on success, -1 otherwise.
  */
@@ -106,8 +173,6 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
     int rv;
     int rss[NR_MM_COUNTERS];
     unsigned long prot;
-    pte_t ptent;
-    bool rier;
 
     // let's preemptively get this protection --> could be outdated?
     prot = memdom_get_pgprot(vma->memdom_id, dst_smv);
@@ -191,35 +256,21 @@ int copy_pgtable_smv(int dst_smv, int src_smv,
      * pgtables for destination  */
     set_pte_at(mm, address, dst_pte, *src_pte);
 
-    if (vma->memdom_id > MAIN_THREAD) {
-        rier = (current->personality & READ_IMPLIES_EXEC) &&
-            (prot & VM_READ);
-        /* Does the application expect PROT_READ to imply PROT_EXEC */
-        if (rier && (vma->vm_flags & VM_MAYEXEC))
-            prot |= VM_EXEC;
-
-        ptent = ptep_modify_prot_start(mm, address, dst_pte);
-        ptent = pte_modify(ptent, vm_get_page_prot(prot));
-
-        /* Avoid taking write faults for known dirty pages */
-        if (vma_wants_writenotify(vma) && pte_dirty(ptent) &&
-            (pte_soft_dirty(ptent) ||
-             !(vma->vm_flags & VM_SOFTDIRTY))) {
-            ptent = pte_mkwrite(ptent);
-        }
-        ptep_modify_prot_commit(mm, address, dst_pte, ptent);
-
-        slog(KERN_INFO, "[%s] Set protection bits for smv %d in memdom %d for pte_val:0x%16lx\n", __func__, dst_smv, vma->memdom_id, pte_val(*dst_pte));
-    }
-
     printk(KERN_INFO "[%s] src smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",
                 __func__, src_smv, pgd_val(*src_pgd), pud_val(*src_pud), pmd_val(*src_pmd), pte_val(*src_pte));
     printk(KERN_INFO "[%s] dst smv %d: pgd_val:0x%16lx, pud_val:0x%16lx, pmd_val:0x%16lx, pte_val:0x%16lx\n",
                 __func__, dst_smv, pgd_val(*dst_pgd), pud_val(*dst_pud), pmd_val(*dst_pmd), pte_val(*dst_pte));
 
     spin_unlock(dst_ptl);
-    pte_unmap(dst_pte);
 
+    // we only want to change the PTE protection bits of a new page if it's current
+    // memdom access is write-only since mprotect clears the write bit
+    if (vma->memdom_id > MAIN_THREAD && prot != VM_WRITE) {
+      set_pte_smv_protection(mm, address, vma, dst_smv, prot);
+    }
+
+    pte_unmap(dst_pte);
+    
     /* By the time we get here, the page tables are set up correctly */
     rv = 0;
 
@@ -236,3 +287,4 @@ unlock_src:
     up_write(&mm->smv_metadataMutex);
     return rv;
 }
+
