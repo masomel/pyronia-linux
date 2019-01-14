@@ -82,6 +82,8 @@ static int send_to_runtime(u32 port_id, int cmd, int attr, int msg) {
 
     // finalize the message
     genlmsg_end(skb, msg_head);
+
+    printk("[%s] Sending message to runtime at pid %d\n", __func__, port_id);
     
     // send the message
     ret = genlmsg_unicast(&init_net, skb, port_id);
@@ -133,6 +135,7 @@ pyr_cg_node_t *pyr_stack_request(u32 pid)
     }
 
  out:
+    memset(callstack_req->cg_buf, 0, MAX_RECV_LEN);
     callstack_req->runtime_responded = 0;
     return cg;
 }
