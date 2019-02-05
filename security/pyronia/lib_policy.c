@@ -271,7 +271,7 @@ static struct pyr_lib_policy * pyr_find_lib_policy(struct pyr_lib_policy_db *pol
 
     while (runner != NULL) {
         if (!strncmp(runner->lib, lib, strlen(runner->lib))) {
-	  printk(KERN_ERR "[%s] Found policy for library %s\n", __func__, runner->lib);
+	  PYR_DEBUG("[%s] Found policy for library %s\n", __func__, runner->lib);
 	  return runner;
         }
         runner = runner->next;
@@ -512,7 +512,7 @@ int pyr_deserialize_lib_policy(struct pyr_profile *profile,
         goto fail;
     }
 
-    printk(KERN_ERR "[%s] Num of rules %d\n", __func__, num_rules);
+    PYR_DEBUG("[%s] Num of rules %d\n", __func__, num_rules);
     
     next_rule = strsep(&lp_str, LIB_RULE_STR_DELIM);
     while(next_rule && count < num_rules) {
