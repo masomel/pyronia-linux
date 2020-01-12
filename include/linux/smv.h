@@ -65,6 +65,8 @@ int smv_join_memdom(int memdom_id, int smv_id);
 int smv_leave_memdom(int memdom_id, int smv_id, struct mm_struct *mm);
 int smv_is_in_memdom(int memdom_id, int smv_id);
 int smv_exists(int smv_id);
-int smv_get_smv_id(void);
+int thread_join_smv(int smv_id);
+int thread_get_smv(void);
+int thread_switch_to_smv(int smv_id);
 int register_smv_thread(int smv_id);
 #endif

@@ -618,6 +618,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
            sizeof(struct memdom_struct*)*SMV_ARRAY_SIZE);
     memset(mm->pgd_smv, 0, sizeof(pgd_t)*SMV_ARRAY_SIZE);
     mm->using_smv = 0;
+    mm->trusted_smv_id = -1;
     mm->standby_smv_id = -1;
     mm->protected_vmas = NULL;
 
@@ -1509,6 +1510,10 @@ static struct task_struct *copy_process(unsigned long clone_flags,
         /* Initialize mmap_memdom_id to -1 */
 	p->mmap_memdom_id = -1;
 
+        /* Initialize the SMV joined bitmap */
+        bitmap_zero(p->smv_bitmapJoin, SMV_ARRAY_SIZE);
+        set_bit(p->smv_id, p->smv_bitmapJoin);
+
 	/* Perform scheduler related setup. Assign this task to a CPU. */
 	retval = sched_fork(clone_flags, p);
 	if (retval)
@@ -1864,7 +1869,9 @@ long _do_fork(unsigned long clone_flags,
 	    /* Reset smv_id for smv_thread_create and assign smv_id
 	     * to the child task p. */
 	    p->smv_id = current->mm->standby_smv_id;
-	    current->mm->standby_smv_id = -1;	    
+	    current->mm->standby_smv_id = -1;
+            bitmap_zero(p->smv_bitmapJoin, SMV_ARRAY_SIZE);
+            set_bit(p->smv_id, current->smv_bitmapJoin);
 	    slog(KERN_INFO, "[%s] forked smv thread running in smv %d\n", __func__, p->smv_id);
 	  }
 	}

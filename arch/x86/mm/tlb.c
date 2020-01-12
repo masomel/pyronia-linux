@@ -77,9 +77,6 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 {
 	unsigned cpu = smp_processor_id();
 
-	/* Switch to the next smv, if necessary */
-	switch_smv(tsk, next);
-
 	if (likely(prev != next)) {
 #ifdef CONFIG_SMP
 		this_cpu_write(cpu_tlbstate.state, TLBSTATE_OK);

@@ -10,6 +10,7 @@
 #include <linux/smp.h>
 #include <linux/mm.h>
 #include <asm-generic/tlb.h>
+#include <asm/mmu_context.h>
 
 #define PGALLOC_GFP GFP_KERNEL | __GFP_NOTRACK | __GFP_REPEAT | __GFP_ZERO
 
@@ -52,7 +53,10 @@ int smv_main_init(int is_child){
     down_write(&mm->smv_metadataMutex);
     mm->pgd_smv[MAIN_THREAD] = mm->pgd; // record the main thread's pgd
     mm->page_table_lock_smv[MAIN_THREAD] = mm->page_table_lock; // record the main thread's pgtable lock
+    mm->trusted_smv_id = MAIN_THREAD; // main thread is the default trusted context
     current->smv_id = MAIN_THREAD;       // main thread is using MAIN_THREAD-th (0) smv_id
+    bitmap_zero(current->smv_bitmapJoin, SMV_ARRAY_SIZE);
+    set_bit(smv_id, current->smv_bitmapJoin);
     current->mmap_memdom_id = MAIN_THREAD;  // main thread is using MAIN_THREAD-th (0) as mmap_id
     
     /* make all existing vma in memdom_id: MAIN_THREAD */
@@ -149,7 +153,13 @@ int smv_kill(int smv_id, struct mm_struct *mm){
     smv = mm->smv_metadata[smv_id];
 
     slog(KERN_INFO, "[%s] killing smv metadata %p with ID %d\n", __func__, smv, smv_id);
-    /* TODO: check if current task has the permission to delete the smv, only master thread can do this */
+    /* check if current task has the permission to delete the smv.
+     * Only thread runningin trusted SMV can do this */
+    if (current->smv_id != mm->trusted_smv_id) {
+        printk(KERN_ERR "[%s] Error, insufficient permissions: smv %d\n", __func__, current->smv_id);
+        up_write(&mm->smv_metadataMutex);
+        return -1;
+    }
 
     /* Clear smv_id-th bit in mm's smv_bitmapInUse */
     if( test_bit(smv_id, mm->smv_bitmapInUse) ) {
@@ -193,7 +203,6 @@ int smv_kill(int smv_id, struct mm_struct *mm){
 
     slog(KERN_INFO, "[%s] Deleted smv with ID %d, #smvs: %d / %d\n",
             __func__, smv_id, atomic_read(&mm->num_smvs), SMV_ARRAY_SIZE);
-
     return 0;
 }
 EXPORT_SYMBOL(smv_kill);
@@ -323,8 +332,6 @@ int smv_exists(int smv_id){
         return 0;
     }
 
-    /* TODO: add privilege checks */
-
     down_read(&mm->smv_metadataMutex);
     smv = current->mm->smv_metadata[smv_id];
     up_read(&mm->smv_metadataMutex);
@@ -337,30 +344,119 @@ int smv_exists(int smv_id){
 }
 EXPORT_SYMBOL(smv_exists);
 
-int smv_get_smv_id(void){
+int thread_join_smv(int smv_id) {
+    struct mm_struct *mm = current->mm;
+
+    /* A child smv cannot join the trusted
+       SMV, or a non-existing smv */
+    if (smv_id < MAIN_THREAD
+        || (current->smv_id != mm->trusted_smv_id && smv_id == mm->trusted_smv_id)
+        || smv_id > LAST_SMV_INDEX ) {
+        printk(KERN_ERR "[%s] Error, out of bound: smv %d\n", __func__, smv_id);
+        return -1;
+    }
+
+    // make sure the SMV if make sure the SMV has been created
+    down_read(&mm->smv_metadataMutex);
+    if(!test_bit(smv_id, mm->smv_bitmapInUse) ) {
+        printk(KERN_ERR "[%s] smv %d not found\n", __func__, smv_id);
+        up_read(&mm->smv_metadataMutex);
+        return -1;
+    }
+    up_read(&mm->smv_metadataMutex);
+
+    // join the SMV if the task hasn't already joined
+    if(!test_bit(smv_id, current->smv_bitmapJoin) ) {
+        set_bit(smv_id, current->smv_bitmapJoin);
+    }
+    return 0;
+}
+EXPORT_SYMBOL(thread_join_smv);
+
+int thread_get_smv(void){
     return current->smv_id;
 }
-EXPORT_SYMBOL(smv_get_smv_id);
+EXPORT_SYMBOL(thread_get_smv);
+
+int thread_switch_to_smv(int smv_id) {
+    int err = -1;
+    struct mm_struct *mm = current->mm;
+    int old_smv_id = -1;
+
+    /* Check SMV is within bounds */
+    if (smv_id < MAIN_THREAD || smv_id > LAST_SMV_INDEX ) {
+        printk(KERN_ERR "[%s] Error, out of bound: smv %d\n",
+               __func__, smv_id);
+        goto out;
+    }
+
+    // make sure the SMV is in use
+    down_read(&mm->smv_metadataMutex);
+    if(!test_bit(smv_id, mm->smv_bitmapInUse)) {
+        printk(KERN_ERR "[%s] smv %d not in use\n", __func__, smv_id);
+        up_read(&mm->smv_metadataMutex);
+        goto out;
+    }
+    up_read(&mm->smv_metadataMutex);
+
+    // make sure the thread has joined this SMV
+    if(!test_bit(smv_id, current->smv_bitmapJoin)) {
+        printk(KERN_ERR "[%s] smv %d not joined\n", __func__, smv_id);
+        goto out;
+    }
+
+    // switch the thread's
+    old_smv_id = current->smv_id;
+    current->smv_id = smv_id;
+
+    /* Update number of tasks running in the smv */
+    mutex_lock(&mm->smv_metadata[smv_id]->smv_mutex);
+    atomic_inc(&mm->smv_metadata[smv_id]->ntask);
+    atomic_dec(&mm->smv_metadata[old_smv_id]->ntask);
+    mutex_unlock(&mm->smv_metadata[smv_id]->smv_mutex);
+    
+    // load the CR3 now
+    switch_mm(mm, mm, current);
+
+    err = 0;
+ out:
+    return err;
+}
 
 /* Put smv_id in mm struct for do_fork to use, return -1 if smv_id does not exist */
 int register_smv_thread(int smv_id){
     struct mm_struct *mm = current->mm;
 
-    /* A child smv cannot register itself to MAIN_THREAD or a 
-       non-existing smv */
-    if( smv_id == MAIN_THREAD || smv_id > LAST_SMV_INDEX ) {
+    /* Check smv is within bounds */
+    if (smv_id < MAIN_THREAD || smv_id > LAST_SMV_INDEX ) {
         printk(KERN_ERR "[%s] Error, out of bound: smv %d\n", __func__, smv_id);
         return -1;
     }
 
     /* Tell the kernel we are about to run a new thread in a smv */
     down_read(&mm->smv_metadataMutex);
-    if( !test_bit(smv_id, mm->smv_bitmapInUse) ) {
+    if(!test_bit(smv_id, mm->smv_bitmapInUse) ) {
         printk(KERN_ERR "[%s] smv %d not found\n", __func__, smv_id);
         up_read(&mm->smv_metadataMutex);
         return -1;
     }
+
+    // don't allow this thread to be spawned if the task hasn't joined
+    // this smv
+    if(!test_bit(smv_id, current->smv_bitmapJoin) ) {
+        printk(KERN_ERR "[%s] smv %d not joined\n", __func__, smv_id);
+        up_read(&mm->smv_metadataMutex);
+        return -1;
+    }
     up_read(&mm->smv_metadataMutex);
+
+    // Only thread running in trusted context can spawn another
+    // trusted thread
+    if (smv_id == mm->trusted_smv_id && current->smv_id != smv_id) {
+        printk(KERN_ERR "[%s] unprivileged smv %d cannot spawn thread in trusted SMV\n", __func__, current->smv_id);
+        return -1;
+    }
+
     mm->standby_smv_id = smv_id;  // Will be reset to MAIN_THREAD when do_fork exits.
 
     /* Update number of tasks running in the smv */
@@ -474,7 +570,6 @@ void switch_smv(struct task_struct *next_tsk,
     }
 
     slog(KERN_INFO, "[%s] switching to smv %d\n", __func__, next_tsk->smv_id);
-    //smv_mprotect_all_vmas(next_tsk, next_mm, next_tsk->smv_id);
 }
 
 /* See implementation in memory.c */

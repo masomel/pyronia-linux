@@ -417,6 +417,7 @@ struct mm_struct {
     struct memdom_vma *protected_vmas;
     /* set to 1 if current mm is using the secure memory view model */
     int using_smv;
+    int trusted_smv_id; // keep track of the trusted SMV context
     /* For smv_thread_create to tell the kernel what smv
        an about-to-run thread will be running in */
     int standby_smv_id;

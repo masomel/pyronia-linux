@@ -1458,7 +1458,9 @@ struct tlbflush_unmap_batch {
 };
 
 struct task_struct {
-    int smv_id;  /* current task running in this smv */
+    int smv_id; // allow single thread to have multiple SMVs
+    DECLARE_BITMAP(smv_bitmapJoin, SMV_ARRAY_SIZE); // Bitmap of smvs.  set to 1 if this thread can run in the smv[i], 0 otherwise.
+
     /* recording what memdom this task is trying to allocate memory in.
        Used by memdom_alloc() */
     int mmap_memdom_id;

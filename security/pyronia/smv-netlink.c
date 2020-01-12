@@ -6,6 +6,25 @@
 #include <linux/memdom.h>
 #include <linux/sched.h>
 
+enum message_type {
+    MEMDOM_OP,
+    SMV_OP,
+};
+
+enum smv_ops {
+    SMV_MAIN_INIT_OP,
+    SMV_CREATE_OP,
+    TH_SMV_GET_OP,
+    SMV_KILL_OP,
+    SMV_REG_TH_OP,
+    SMV_EXISTS_OP,
+    TH_SMV_JOIN_OP,
+    TH_SMV_SWITCH_OP,
+    SMV_JOIN_DOM_OP,
+    SMV_LEAVE_DOM_OP,
+    SMV_IN_DOM_OP,
+};
+
 /* attributes (variables): the index in this enum is used as a reference for the type,
  *             userspace application has to indicate the corresponding type
  *             the policy is used for security considerations
@@ -89,31 +108,59 @@ int memdom_internal_function_dispatcher(int memdom_op, long memdom_id1,
     return rc;
 }
 
-int smv_internal_function_dispatcher(int smv_op, long smv_id, int smv_domain_op,
-                                          long memdom_id1, long memdom_id2){
+int smv_internal_function_dispatcher(int smv_op, int smv_id, int memdom_id, int is_child){
 
-    int rc = 0;
+    int rc = -1;
 
-    if(smv_op == 0){
+    switch (smv_op) {
+    case (SMV_MAIN_INIT_OP):
+        slog(KERN_CRIT, "[%s] smv_main_init(%d)\n", __func__, is_child);
+        rc = smv_main_init(is_child);
+        break;
+    case (SMV_CREATE_OP):
         slog(KERN_CRIT, "[%s] smv_create()\n", __func__);
         rc = smv_create();
-    }else if(smv_op == 1){
-        slog(KERN_CRIT, "[%s] smv_kill(%ld)\n", __func__, smv_id);
+        break;
+    case (SMV_KILL_OP):
+        slog(KERN_CRIT, "[%s] smv_kill(%d)\n", __func__, smv_id);
         rc = smv_kill(smv_id, NULL);
-    }else if(smv_op == 2){
-        slog(KERN_CRIT, "[%s] smv_run(%ld)\n", __func__, smv_id);
-    }else if(smv_op == 3){
-        if(smv_domain_op == 0){
-	  slog(KERN_CRIT, "[%s] smv_join_domain(%ld, %ld)\n", __func__, memdom_id1, smv_id);
-            rc = smv_join_memdom(memdom_id1, smv_id);
-        }else if(smv_domain_op == 1){
-	    slog(KERN_CRIT, "[%s] smv_leave_domain(%ld, %ld)\n", __func__, smv_id, memdom_id1);
-            rc = smv_leave_memdom(memdom_id1, smv_id, NULL);
-        }else if(smv_domain_op == 2){
-	    slog(KERN_CRIT, "[%s] smv_is_in_domain(%ld, %ld)\n", __func__, memdom_id1, smv_id);
-            rc = smv_is_in_memdom(memdom_id1, smv_id);
-        }
+        break;
+    case (SMV_REG_TH_OP):
+        slog(KERN_CRIT, "[%s] register_smv_thread(%d)\n", __func__, smv_id);
+        rc = register_smv_thread(smv_id);
+        break;
+    case (SMV_EXISTS_OP):
+        slog(KERN_CRIT, "[%s] smv_exists(%d)\n", __func__, smv_id);
+        rc = smv_exists(smv_id);
+        break;
+    case (TH_SMV_JOIN_OP):
+        slog(KERN_CRIT, "[%s] thread_join_smv(%d)\n", __func__, smv_id);
+        rc = thread_join_smv(smv_id);
+        break;
+    case (TH_SMV_GET_OP):
+        slog(KERN_CRIT, "[%s] thread_get_smv()\n", __func__);
+        rc = thread_get_smv();
+        break;
+    case (TH_SMV_SWITCH_OP):
+        slog(KERN_CRIT, "[%s] thread_switch_to_smv(%d)\n", __func__, smv_id);
+        rc = thread_switch_to_smv(smv_id);
+        break;
+    case (SMV_JOIN_DOM_OP):
+        slog(KERN_CRIT, "[%s] smv_join_domain(%d, %d)\n", __func__, memdom_id, smv_id);
+        rc = smv_join_memdom(memdom_id, smv_id);
+        break;
+    case (SMV_LEAVE_DOM_OP):
+        slog(KERN_CRIT, "[%s] smv_leave_domain(%d, %d)\n", __func__, memdom_id, smv_id);
+        rc = smv_leave_memdom(memdom_id, smv_id);
+        break;
+    case (SMV_IN_DOM_OP):
+        slog(KERN_CRIT, "[%s] smv_is_in_domain(%d, %d)\n", __func__, memdom_id, smv_id);
+        rc = smv_is_in_memdom(memdom_id, smv_id);
+        break;
+    default:
+        break;
     }
+
     return rc;
 }
 
@@ -130,9 +177,8 @@ int parse_message(char* message){
     void *memdom_data = NULL;
     unsigned long malloc_start = 0;
 
-    int smv_op = -1;         /* 0: create, 1: kill, 2: run, 3: domain related, -1: undefined */
-    int smv_domain_op = -1;    /* 0: join, 1: leave, 2: isin, 3: switch, -1: undefined */
-    long smv_id = -1;
+    int smv_op = -1;
+    int smv_id = -1;
     int is_child = -1;
 
     int i = 0;
@@ -152,9 +198,9 @@ int parse_message(char* message){
         // decide message type
         if(message_type == -1){
             if( (strcmp(token, "memdom")) == 0)
-                message_type = 0;
+                message_type = MEMDOM_OP;
             else if( (strcmp(token, "smv")) == 0) {
-                message_type = 1;
+                message_type = SMV_OP;
 		slog(KERN_CRIT, "message type smv\n");
 	    }
             else if( (strcmp(token, "gdb_breakpoint")) == 0){
@@ -167,7 +213,7 @@ int parse_message(char* message){
 
         /* token 2 */
         // decide operation
-        if( message_type == 0 && memdom_op == -1){  // memdom
+        if( message_type == MEMDOM_OP && memdom_op == -1){  // memdom
 	  slog(KERN_CRIT, "memdom token 2 (op): %s\n", token);
 
             if( (strcmp(token, "create")) == 0 )
@@ -195,28 +241,30 @@ int parse_message(char* message){
             }
             continue;
         }
-        else if( message_type == 1 && smv_op == -1){ // smv
+        else if( message_type == SMV_OP && smv_op == -1){ // smv
 	    slog(KERN_CRIT, "smv token 2 (op): %s\n", token);
             if( (strcmp(token, "create")) == 0 )
-                smv_op = 0;
+                smv_op = SMV_CREATE_OP;
+            else if ((strcmp(token, "thgetsmv")) == 0)
+                smv_op = TH_SMV_GET_OP;
             else if( (strcmp(token, "kill")) == 0 )
-                smv_op = 1;
-            else if( (strcmp(token, "run")) == 0 )
-                smv_op = 2;
-            else if( (strcmp(token, "domain")) == 0 )
-                smv_op = 3;
+                smv_op = SMV_KILL_OP;
             else if ((strcmp(token, "exists")) == 0 )
-                smv_op = 4; // print all vma a smv holds
+                smv_op = SMV_EXISTS_OP; // print all vma a smv holds
             else if ((strcmp(token, "registerthread")) == 0 )
-                smv_op = 5;
-            else if ((strcmp(token, "printpgtable")) == 0)
-                smv_op = 6; //get smv id
-            else if ((strcmp(token, "finalize")) == 0)
-                smv_op = 7; //finalize smv environment
+                smv_op = SMV_REG_TH_OP;
             else if ((strcmp(token, "maininit")) == 0 )
-                smv_op = 9;
-            else if ((strcmp(token, "getsmvid")) == 0)
-                smv_op = 10; //get smv id
+                smv_op = SMV_MAIN_INIT_OP;
+            else if ((strcmp(token, "thjoinsmv")) == 0)
+                smv_op = TH_SMV_JOIN_OP;
+            else if ((strcmp(token, "thswitchsmv")) == 0)
+                smv_op = TH_SMV_SWITCH_OP;
+            else if ((strcmp(token, "domainjoin")) == 0)
+                smv_op = SMV_JOIN_DOM_OP;
+            else if ((strcmp(token, "domainleave")) == 0)
+                smv_op = SMV_LEAVE_DOM_OP;
+            else if ((strcmp(token, "domainisin")) == 0)
+                smv_op = SMV_IN_DOM_OP;
             else {
                 printk(KERN_CRIT "Error: received undefined smv ops: %s\n", token);
                 return -1;
@@ -245,14 +293,14 @@ int parse_message(char* message){
         }
 
         // smv: get smv id
-        else if (message_type == 1 && (smv_op >= 1 && smv_op <= 6) && smv_id == -1) {
+        else if (message_type == SMV_OP && smv_op >= SMV_KILL_OP && smv_id == -1) {
 	  slog(KERN_CRIT, "smv token 3 (smv_id): %s\n", token);
-	  if( kstrtol(token, 10, &smv_id) ){
+	  if( kstrtoint(token, 10, &smv_id) ){
 	    return -1;
 	  }
 	  continue;
 	}
-	else if (message_type == 1 && smv_op == 9 && is_child == -1) {
+	else if (message_type == SMV_OP && smv_op == SMV_MAIN_INIT_OP && is_child == -1) {
 	  if( kstrtoint(token, 10, &is_child) ){
 	    return -1;
 	  }
@@ -283,20 +331,11 @@ int parse_message(char* message){
             continue;
         }
         // smv gets memory domain op
-        else if( message_type == 1 && smv_op == 3 && smv_domain_op == -1){
-	    slog(KERN_CRIT, "smv token 4 (smv_domain_op): %s\n", token);
-            if( (strcmp(token, "join")) == 0)
-                smv_domain_op = 0;
-            else if( (strcmp(token, "leave")) == 0)
-                smv_domain_op = 1;
-            else if( (strcmp(token, "isin")) == 0)
-                smv_domain_op = 2;
-            else if( (strcmp(token, "switch")) == 0)
-                smv_domain_op = 3;
-            else {
-                printk(KERN_CRIT "Error: received undefined smv domain ops: %s\n", token);
+        else if( message_type == SMV_OP && smv_op >= SMV_JOIN_DOM_OP && memdom_id == -1){
+            if( kstrtoint(token, 10, &memdom_id) ){
                 return -1;
             }
+            slog(KERN_CRIT, "smv token 4 (memdom_id): %d\n", memdom_id);
             continue;
         }
 
@@ -332,14 +371,6 @@ int parse_message(char* message){
             }
 
         }
-            // smv gets memory domain id
-        else if(message_type == 1 && smv_op == 3 && memdom_id1 == -1){
-	    slog(KERN_CRIT, "smv gets memdom_id1: %s\n", token);
-            if( kstrtol(token, 10, &memdom_id1) )
-                return -1;
-            continue;
-        }
-
 
         /* token 6*/
         // memdom gets memdom privilege value
@@ -361,7 +392,7 @@ int parse_message(char* message){
         }
     }
 
-    if(message_type == 0){
+    if(message_type == MEMDOM_OP){
         if (memdom_op == 9) {
 //          page_walk_by_task(NULL);
             return 0;
@@ -372,37 +403,10 @@ int parse_message(char* message){
                                                 memdom_priv_op, memdom_priv_value);
         }
     }
-    else if(message_type == 1){
-
-        if (smv_op == 10) {
-            /* User queries smv ID the current thread is running in */
-            return smv_get_smv_id();
-        }
-        else if (smv_op == 9) {
-            smv_main_init(is_child);
-            return 0;
-        }
-        else if (smv_op == 7) {
-//          smv_finalize();
-        }
-        else if (smv_op == 4) {
-            /* Check whether a smv exists */
-            return smv_exists(smv_id);
-        }
-        else if (smv_op == 5) {
-	    slog(KERN_INFO, "[%s] register smv thread running in smv %ld\n", __func__, smv_id);
-            register_smv_thread(smv_id);
-            return 0;
-        }
-        else if (smv_op == 6) {
-//          smv_print_pgtables(smv_id);
-            return 0;
-        }
-        else {
-            /* Other smv operations */
-            return smv_internal_function_dispatcher(smv_op, smv_id, smv_domain_op,
-                                                 memdom_id1, memdom_id2);
-        }
+    else if(message_type == SMV_OP){
+        /* Other smv operations */
+        return smv_internal_function_dispatcher(smv_op, smv_id, memdom_id, is_child);
+    }
 
     }else if(message_type == 9){
 //      kernel_gdb_breakpoint();
