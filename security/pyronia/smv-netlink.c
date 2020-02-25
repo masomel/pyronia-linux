@@ -151,7 +151,7 @@ int smv_internal_function_dispatcher(int smv_op, int smv_id, int memdom_id, int 
         break;
     case (SMV_LEAVE_DOM_OP):
         slog(KERN_CRIT, "[%s] smv_leave_domain(%d, %d)\n", __func__, memdom_id, smv_id);
-        rc = smv_leave_memdom(memdom_id, smv_id);
+        rc = smv_leave_memdom(memdom_id, smv_id, NULL);
         break;
     case (SMV_IN_DOM_OP):
         slog(KERN_CRIT, "[%s] smv_is_in_domain(%d, %d)\n", __func__, memdom_id, smv_id);
@@ -325,14 +325,14 @@ int parse_message(char* message){
             }
             // memdom priv, get smvID
             if( memdom_op == 4){
-                if( kstrtol(token, 10, &smv_id) )
+                if( kstrtoint(token, 10, &smv_id) )
                     return -1;
             }
             continue;
         }
         // smv gets memory domain op
-        else if( message_type == SMV_OP && smv_op >= SMV_JOIN_DOM_OP && memdom_id == -1){
-            if( kstrtoint(token, 10, &memdom_id) ){
+        else if( message_type == SMV_OP && smv_op >= SMV_JOIN_DOM_OP && memdom_id1 == -1){
+            if( kstrtol(token, 10, &memdom_id1) ){
                 return -1;
             }
             slog(KERN_CRIT, "smv token 4 (memdom_id): %d\n", memdom_id);
@@ -405,10 +405,9 @@ int parse_message(char* message){
     }
     else if(message_type == SMV_OP){
         /* Other smv operations */
-        return smv_internal_function_dispatcher(smv_op, smv_id, memdom_id, is_child);
+        return smv_internal_function_dispatcher(smv_op, smv_id, memdom_id1, is_child);
     }
-
-    }else if(message_type == 9){
+    else if(message_type == 9){
 //      kernel_gdb_breakpoint();
         return 0;
     }

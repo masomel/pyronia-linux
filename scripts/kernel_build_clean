@@ -1,7 +1,7 @@
 #!/bin/bash
 
-KERNEL_SRC=/home/pyronia/pyronia-linux
-BUILD=/home/pyronia/build/kernel
+KERNEL_SRC=$HOME/pyronia-linux
+BUILD=$HOME/build/kernel
 
 cd $KERNEL_SRC
 echo "======== [x64-kernel] Cleaning build directories. ========"

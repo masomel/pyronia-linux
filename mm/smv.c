@@ -422,6 +422,7 @@ int thread_switch_to_smv(int smv_id) {
  out:
     return err;
 }
+EXPORT_SYMBOL(thread_switch_to_smv);
 
 /* Put smv_id in mm struct for do_fork to use, return -1 if smv_id does not exist */
 int register_smv_thread(int smv_id){
